@@ -208,6 +208,8 @@ export async function importBundle(bundle: ProjectBundle, opts: { titleSuffix?: 
     return base;
   }) as BibleEntry[];
 
+  // Old → new bible ids (shared series entries keep theirs), for whiteboard cards.
+  const bibleIds = new Map(bundle.bible.map((b, i) => [b.id, bible[i].id]));
   const tags = bundle.tags.map((t) => ({ ...t, id: remap(t.id)!, projectId: pid }));
   const plotThreads = bundle.plotThreads.map((t) => ({
     ...t,
@@ -244,7 +246,21 @@ export async function importBundle(bundle: ProjectBundle, opts: { titleSuffix?: 
     ...w,
     id: remap(w.id)!,
     projectId: pid,
-    elements: w.elements.map((el) => (el.type === 'note' ? { ...el, id: opts.keepIds ? el.id : newId(), docId: remap(el.docId) } : { ...el, id: opts.keepIds ? el.id : newId() })),
+    elements: w.elements.map((el) => {
+      const id = opts.keepIds ? el.id : remap(el.id)!;
+      switch (el.type) {
+        case 'note':
+          return { ...el, id, docId: remap(el.docId) };
+        case 'arrow':
+          return { ...el, id, from: remap(el.from ?? null), to: remap(el.to ?? null) };
+        case 'card':
+          return { ...el, id, bibleId: bibleIds.get(el.bibleId) ?? el.bibleId };
+        case 'image':
+          return { ...el, id, assetId: remap(el.assetId)! };
+        default:
+          return { ...el, id };
+      }
+    }),
   }));
   const assets = await Promise.all(
     bundle.assets.map(async (a) => ({

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Select, Stack, TextField, Tooltip } from '@mui/material';
+import { Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemText, Menu, MenuItem, Select, Stack, TextField, Tooltip } from '@mui/material';
+import PersonPinIcon from '@mui/icons-material/PersonPinOutlined';
+import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import ImageIcon from '@mui/icons-material/ImageOutlined';
 import StyleIcon from '@mui/icons-material/StyleOutlined';
 import LayersClearIcon from '@mui/icons-material/LayersClearOutlined';
@@ -15,6 +17,8 @@ import { registerFlusher } from '@/features/editor/autosave';
 import { WhiteboardEditor, type WhiteboardHandle } from './WhiteboardEditor';
 import { WhiteboardTabs, type SaveState } from './WhiteboardTabs';
 import { exportWhiteboardPng } from './exportPng';
+import { buildTemplate, TEMPLATES, type TemplateId } from '@/lib/whiteboardTemplates';
+import { BIBLE_KIND_LABELS } from '@/lib/bible';
 
 const SAVE_DELAY_MS = 600;
 type Patch = Pick<Whiteboard, 'elements' | 'viewport'>;
@@ -27,11 +31,14 @@ type Patch = Pick<Whiteboard, 'elements' | 'viewport'>;
 export function WhiteboardView() {
   const projectId = useStore((s) => s.project?.id);
   const docs = useStore((s) => s.docs);
+  const bible = useStore((s) => s.bible);
   const notify = useStore((s) => s.notify);
   const [boards, setBoards] = useState<Whiteboard[] | null>(null);
   const [activeId, setActiveId] = useState<ID | null>(null);
   const [status, setStatus] = useState<Record<ID, SaveState>>({});
   const [cardOpen, setCardOpen] = useState(false);
+  const [bibleOpen, setBibleOpen] = useState(false);
+  const [templateAnchor, setTemplateAnchor] = useState<HTMLElement | null>(null);
   const handles = useRef(new Map<ID, WhiteboardHandle>());
   const pending = useRef(new Map<ID, { board: Whiteboard; timer: ReturnType<typeof setTimeout> }>());
   const savers = useRef(new Map<ID, (patch: Patch) => void>());
@@ -281,6 +288,23 @@ export function WhiteboardView() {
     setCardOpen(false);
   };
 
+  const addBibleCard = (bibleId: ID) => {
+    const h = active ? handles.current.get(active.id) : undefined;
+    if (!h) return;
+    const c = h.center();
+    h.addElement({ id: newId(), type: 'card', x: c.x - 120, y: c.y - 65, w: 240, h: 130, bibleId, color: 'ink', strokeWidth: 1 });
+    setBibleOpen(false);
+  };
+
+  const addTemplate = (id: TemplateId) => {
+    setTemplateAnchor(null);
+    const h = active ? handles.current.get(active.id) : undefined;
+    if (!h) return;
+    h.addElements(buildTemplate(id, newId, bible));
+  };
+
+  const hasCharacters = bible.some((b) => b.kind === 'character');
+
   if (!boards || !active) return <ViewSkeleton />;
 
   return (
@@ -301,9 +325,22 @@ export function WhiteboardView() {
         onSaveAll={() => void saveAll()}
       />
       <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 2, py: 0.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', flexWrap: 'wrap', gap: 1 }}>
+        <Button startIcon={<DashboardCustomizeIcon />} onClick={(e) => setTemplateAnchor(e.currentTarget)} aria-haspopup="menu">
+          Templates
+        </Button>
+        <Menu anchorEl={templateAnchor} open={!!templateAnchor} onClose={() => setTemplateAnchor(null)}>
+          {TEMPLATES.map((tp) => (
+            <MenuItem key={tp.id} disabled={tp.needsCharacters && !hasCharacters} onClick={() => addTemplate(tp.id)} sx={{ maxWidth: 380, whiteSpace: 'normal' }}>
+              <ListItemText primary={tp.name} secondary={tp.needsCharacters && !hasCharacters ? 'Add characters to the Story Bible first' : tp.description} />
+            </MenuItem>
+          ))}
+        </Menu>
         <Box sx={{ flex: 1 }} />
         <Button startIcon={<StyleIcon />} onClick={() => setCardOpen(true)} disabled={!scenes.length}>
           Add scene card
+        </Button>
+        <Button startIcon={<PersonPinIcon />} onClick={() => setBibleOpen(true)} disabled={!bible.length}>
+          Add Story Bible card
         </Button>
         <Select size="small" value={active.background} onChange={(e) => setBackground(e.target.value as Whiteboard['background'])} inputProps={{ 'aria-label': 'Background' }} sx={{ height: 36 }}>
           <MenuItem value="dots">Dots</MenuItem>
@@ -333,6 +370,22 @@ export function WhiteboardView() {
           <WhiteboardEditor board={b} onSave={saverFor(b.id)} registerHandle={(h) => handles.current.set(b.id, h)} />
         </Box>
       ))}
+
+      <Dialog open={bibleOpen} onClose={() => setBibleOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add Story Bible card</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            options={[...bible].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))}
+            groupBy={(o) => BIBLE_KIND_LABELS[o.kind].plural}
+            getOptionLabel={(o) => o.name}
+            onChange={(_, v) => v && addBibleCard(v.id)}
+            renderInput={(p) => <TextField {...p} autoFocus margin="dense" label="Character, place, item or lore" helperText="The card stays up to date with the entry; click its ↗ corner (or double-click) to open it." />}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBibleOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={cardOpen} onClose={() => setCardOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Add scene card</DialogTitle>

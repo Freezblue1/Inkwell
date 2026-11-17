@@ -15,10 +15,13 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import CenterFocusWeakIcon from '@mui/icons-material/CenterFocusWeak';
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill';
+import CropFreeIcon from '@mui/icons-material/CropFree';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
+import MapIcon from '@mui/icons-material/MapOutlined';
 import { useTheme } from '@mui/material/styles';
 import { INK_COLORS, NOTE_COLORS } from '@/lib/whiteboard';
 
-export type WbTool = 'select' | 'hand' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'note' | 'text' | 'eraser';
+export type WbTool = 'select' | 'hand' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'note' | 'text' | 'frame' | 'eraser';
 
 export interface WbStyle {
   color: string;
@@ -33,9 +36,10 @@ export const TOOLS: { value: WbTool; label: string; key: string; icon: ReactElem
   { value: 'pen', label: 'Pen', key: 'P', icon: <EditIcon fontSize="small" /> },
   { value: 'rect', label: 'Rectangle', key: 'R', icon: <CropSquareIcon fontSize="small" /> },
   { value: 'ellipse', label: 'Ellipse', key: 'O', icon: <RadioButtonUncheckedIcon fontSize="small" /> },
-  { value: 'arrow', label: 'Arrow', key: 'A', icon: <ArrowRightAltIcon fontSize="small" /> },
+  { value: 'arrow', label: 'Arrow — start or end on a note to attach it', key: 'A', icon: <ArrowRightAltIcon fontSize="small" /> },
   { value: 'note', label: 'Sticky note', key: 'N', icon: <StickyNote2Icon fontSize="small" /> },
   { value: 'text', label: 'Text', key: 'T', icon: <TextFieldsIcon fontSize="small" /> },
+  { value: 'frame', label: 'Frame — groups what you put inside it', key: 'F', icon: <CropFreeIcon fontSize="small" /> },
   { value: 'eraser', label: 'Eraser', key: 'E', icon: <ClearIcon fontSize="small" /> },
 ];
 
@@ -51,6 +55,9 @@ interface Props {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  minimap: boolean;
+  onToggleMinimap: () => void;
+  onPickImage: () => void;
 }
 
 /** Floating tool palette for the whiteboard. */
@@ -73,6 +80,11 @@ export function WhiteboardToolbar(p: Props) {
           </Tooltip>
         ))}
       </ToggleButtonGroup>
+      <Tooltip title="Add a picture (I) — or drop / paste one">
+        <IconButton size="small" aria-label="Add a picture" onClick={p.onPickImage}>
+          <AddPhotoAlternateIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
       <Divider orientation="vertical" flexItem />
       <Box sx={{ display: 'flex', gap: 0.25, px: 0.5 }} role="radiogroup" aria-label="Color">
         {(p.tool === 'note' ? NOTE_COLORS : INK_COLORS).map((c) => {
@@ -134,6 +146,11 @@ export function WhiteboardToolbar(p: Props) {
       <IconButton size="small" aria-label="Zoom in" onClick={() => p.onZoom(1.25)}>
         <ZoomInIcon fontSize="small" />
       </IconButton>
+      <Tooltip title={p.minimap ? 'Hide minimap (M)' : 'Show minimap (M)'}>
+        <ToggleButton size="small" value="minimap" selected={p.minimap} onChange={p.onToggleMinimap} aria-label="Minimap" sx={{ px: 1 }}>
+          <MapIcon fontSize="small" />
+        </ToggleButton>
+      </Tooltip>
       <Tooltip title="Fit everything (Shift+1)">
         <IconButton size="small" aria-label="Fit to content" onClick={p.onFit}>
           <CenterFocusWeakIcon fontSize="small" />

@@ -1,5 +1,5 @@
 /** Whiteboard geometry: bounds, hit-testing, moving, resizing and path smoothing. Pure functions. */
-import type { WbElement, WbPath } from '@/types/models';
+import type { ID, WbArrow, WbElement, WbFrame, WbPath } from '@/types/models';
 
 export interface Point {
   x: number;
@@ -18,6 +18,9 @@ export const INK_COLORS = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#
 export const TEXT_LINE_HEIGHT = 1.3;
 export const NOTE_PADDING = 12;
 export const NOTE_FONT_SIZE = 16;
+/** Height of a frame's title bar (the part you grab to move it). */
+export const FRAME_TITLE_H = 28;
+export const FRAME_COLORS = ['#90caf9', '#ef9a9a', '#a5d6a7', '#ffe082', '#ce93d8', '#b0bec5'];
 
 /** Line count estimate used when no canvas is available (tests, SSR). */
 function estimateLines(text: string, width: number, fontSize: number): number {
@@ -73,6 +76,9 @@ export function elementBounds(el: WbElement): Rect {
       return { x: Math.min(el.x1, el.x2), y: Math.min(el.y1, el.y2), w: Math.abs(el.x2 - el.x1), h: Math.abs(el.y2 - el.y1) };
     case 'text':
       return { x: el.x, y: el.y, w: el.w, h: textHeight(el.text, el.w, el.fontSize) };
+    case 'frame':
+      // Includes the title bar above the frame.
+      return { x: el.x, y: el.y - FRAME_TITLE_H, w: el.w, h: el.h + FRAME_TITLE_H };
     default:
       return { x: el.x, y: el.y, w: el.w, h: el.h };
   }
@@ -110,6 +116,14 @@ export function hitTest(el: WbElement, p: Point, tol = 6): boolean {
     }
     case 'arrow':
       return distToSegment(p, { x: el.x1, y: el.y1 }, { x: el.x2, y: el.y2 }) <= tol + el.strokeWidth / 2;
+    case 'frame': {
+      // Only the title bar and the border pick up a frame, so you can still click what's inside it.
+      const inside = p.x >= el.x - tol && p.x <= el.x + el.w + tol && p.y >= el.y - FRAME_TITLE_H - tol && p.y <= el.y + el.h + tol;
+      if (!inside) return false;
+      const onTitle = p.y <= el.y + 2 && p.y >= el.y - FRAME_TITLE_H - tol && p.x <= el.x + Math.max(160, el.w);
+      const onBorder = Math.abs(p.x - el.x) <= tol || Math.abs(p.x - el.x - el.w) <= tol || Math.abs(p.y - el.y) <= tol || Math.abs(p.y - el.y - el.h) <= tol;
+      return onTitle || onBorder;
+    }
     case 'ellipse': {
       const rx = el.w / 2 + tol;
       const ry = el.h / 2 + tol;
@@ -162,6 +176,12 @@ export function resizeElement<T extends WbElement>(el: T, p: Point, min = 16): T
       return { ...el, x2: p.x, y2: p.y };
     case 'text':
       return { ...el, w: Math.max(min * 3, p.x - el.x) };
+    case 'image': {
+      // Pictures keep their proportions.
+      const ratio = el.h / Math.max(1, el.w);
+      const w = Math.max(min * 2, p.x - el.x, (p.y - el.y) / ratio);
+      return { ...el, w, h: w * ratio };
+    }
     default:
       return { ...el, w: Math.max(min, p.x - (el as { x: number }).x), h: Math.max(min, p.y - (el as { y: number }).y) };
   }
@@ -202,4 +222,106 @@ export function arrowHead(x1: number, y1: number, x2: number, y2: number, size: 
   const p1 = [x2 - size * Math.cos(a - Math.PI / 7), y2 - size * Math.sin(a - Math.PI / 7)];
   const p2 = [x2 - size * Math.cos(a + Math.PI / 7), y2 - size * Math.sin(a + Math.PI / 7)];
   return `${x2},${y2} ${p1[0]},${p1[1]} ${p2[0]},${p2[1]}`;
+}
+
+// ── Frames ────────────────────────────────────────────────────────────────
+
+export function containsRect(outer: Rect, inner: Rect): boolean {
+  return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+}
+
+/** Ids of the elements whose centre lies inside a frame (they move with it). Bigger frames don't count. */
+export function elementsInFrame(frame: WbFrame, els: WbElement[]): ID[] {
+  const box = { x: frame.x, y: frame.y, w: frame.w, h: frame.h };
+  return els
+    .filter((e) => {
+      if (e.id === frame.id) return false;
+      const b = elementBounds(e);
+      if (e.type === 'frame' && b.w * b.h >= box.w * box.h) return false;
+      const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      return c.x >= box.x && c.x <= box.x + box.w && c.y >= box.y && c.y <= box.y + box.h;
+    })
+    .map((e) => e.id);
+}
+
+/** Frames first (behind everything), then the rest in their stacking order. */
+export function paintOrder(els: WbElement[]): WbElement[] {
+  return [...els.filter((e) => e.type === 'frame'), ...els.filter((e) => e.type !== 'frame')];
+}
+
+// ── Attached arrows ───────────────────────────────────────────────────────
+
+/** Can an arrow end be attached to this element? */
+export function isAttachable(el: WbElement): boolean {
+  return el.type !== 'arrow' && el.type !== 'path' && el.type !== 'frame';
+}
+
+/** Topmost element an arrow end could attach to at p. */
+export function attachableAt(els: WbElement[], p: Point, tol = 6, exclude?: ID): WbElement | null {
+  for (let i = els.length - 1; i >= 0; i--) {
+    const el = els[i];
+    if (el.id !== exclude && isAttachable(el) && hitTest(el, p, tol)) return el;
+  }
+  return null;
+}
+
+const centerOf = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+/** Where a line from the element's centre towards `toward` leaves its outline (plus a small gap). */
+export function boundaryPoint(el: WbElement, toward: Point, gap = 6): Point {
+  const r = elementBounds(el);
+  const c = centerOf(r);
+  const dx = toward.x - c.x;
+  const dy = toward.y - c.y;
+  if (!dx && !dy) return c;
+  if (el.type === 'ellipse') {
+    const rx = r.w / 2 + gap;
+    const ry = r.h / 2 + gap;
+    const k = 1 / Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
+    return { x: c.x + dx * k, y: c.y + dy * k };
+  }
+  const hw = r.w / 2 + gap;
+  const hh = r.h / 2 + gap;
+  const k = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+  return { x: c.x + dx * k, y: c.y + dy * k };
+}
+
+/**
+ * Recomputes the ends of attached arrows from the elements they're attached
+ * to. Attachments to deleted elements are dropped. Returns the same array
+ * when nothing changed.
+ */
+export function routeConnectors(els: WbElement[]): WbElement[] {
+  if (!els.some((e) => e.type === 'arrow' && (e.from || e.to))) return els;
+  const byId = new Map(els.map((e) => [e.id, e]));
+  let changed = false;
+  const out = els.map((el) => {
+    if (el.type !== 'arrow' || (!el.from && !el.to)) return el;
+    const a = el.from ? byId.get(el.from) : undefined;
+    const b = el.to ? byId.get(el.to) : undefined;
+    const aOk = a && isAttachable(a) ? a : undefined;
+    const bOk = b && isAttachable(b) ? b : undefined;
+    const startAim = bOk ? centerOf(elementBounds(bOk)) : { x: el.x2, y: el.y2 };
+    const endAim = aOk ? centerOf(elementBounds(aOk)) : { x: el.x1, y: el.y1 };
+    const s = aOk ? boundaryPoint(aOk, startAim) : { x: el.x1, y: el.y1 };
+    const e = bOk ? boundaryPoint(bOk, endAim) : { x: el.x2, y: el.y2 };
+    const next: WbArrow = { ...el, x1: s.x, y1: s.y, x2: e.x, y2: e.y, from: aOk ? el.from : null, to: bOk ? el.to : null };
+    if (next.x1 === el.x1 && next.y1 === el.y1 && next.x2 === el.x2 && next.y2 === el.y2 && next.from === el.from && next.to === el.to) return el;
+    changed = true;
+    return next;
+  });
+  return changed ? out : els;
+}
+
+/**
+ * Copies elements with fresh ids. Arrows attached to elements inside the copied
+ * set are re-attached to the copies; attachments outside the set are dropped.
+ */
+export function copyElements(els: WbElement[], makeId: () => string, dx = 0, dy = 0): WbElement[] {
+  const ids = new Map(els.map((e) => [e.id, makeId()]));
+  return els.map((el) => {
+    const moved = { ...moveElement(el, dx, dy), id: ids.get(el.id)! };
+    if (moved.type !== 'arrow') return moved;
+    return { ...moved, from: moved.from ? ids.get(moved.from) ?? null : null, to: moved.to ? ids.get(moved.to) ?? null : null };
+  });
 }

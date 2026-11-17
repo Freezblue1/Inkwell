@@ -1,8 +1,12 @@
 import { memo } from 'react';
-import type { WbElement } from '@/types/models';
-import { arrowHead, NOTE_FONT_SIZE, NOTE_PADDING, pointsToPath, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
+import { arrowHead, FRAME_TITLE_H, NOTE_FONT_SIZE, NOTE_PADDING, pointsToPath, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import { useAssetUrl } from '@/hooks/useAssetUrl';
+import { useStore } from '@/store';
+import { BIBLE_KIND_LABELS } from '@/lib/bible';
 
 export const WB_FONT = '"Caveat", "Comic Sans MS", cursive';
+const UI_FONT = 'Roboto, "Segoe UI", sans-serif';
 
 interface Props {
   el: WbElement;
@@ -10,10 +14,12 @@ interface Props {
   /** Hide text while it is being edited in the overlay. */
   hideText?: boolean;
   docTitle?: string;
+  /** Background for arrow labels. */
+  paper?: string;
 }
 
 /** Renders one whiteboard element as SVG. */
-export const WbElementView = memo(function WbElementView({ el, ink, hideText, docTitle }: Props) {
+export const WbElementView = memo(function WbElementView({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props) {
   const color = el.color === 'ink' ? ink : el.color;
   switch (el.type) {
     case 'path':
@@ -22,13 +28,26 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
       return <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={6} fill={el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
     case 'ellipse':
       return <ellipse cx={el.x + el.w / 2} cy={el.y + el.h / 2} rx={el.w / 2} ry={el.h / 2} fill={el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
-    case 'arrow':
+    case 'arrow': {
+      const label = hideText ? '' : el.label?.trim() ?? '';
+      const mx = (el.x1 + el.x2) / 2;
+      const my = (el.y1 + el.y2) / 2;
+      const lw = label.length * 7.2 + 14;
       return (
         <g>
           <line x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2} stroke={color} strokeWidth={el.strokeWidth} strokeLinecap="round" />
           <polygon points={arrowHead(el.x1, el.y1, el.x2, el.y2, 10 + el.strokeWidth * 2)} fill={color} />
+          {label && (
+            <g>
+              <rect x={mx - lw / 2} y={my - 11} width={lw} height={22} rx={11} fill={paper} stroke={color} strokeWidth={1} />
+              <text x={mx} y={my + 4.5} textAnchor="middle" fontSize={13} fontFamily={UI_FONT} fill={color}>
+                {label}
+              </text>
+            </g>
+          )}
         </g>
       );
+    }
     case 'note': {
       const lines = hideText ? [] : wrapText(el.text, el.w - NOTE_PADDING * 2, NOTE_FONT_SIZE);
       const maxLines = Math.max(0, Math.floor((el.h - NOTE_PADDING * 2 - (el.docId ? 18 : 0)) / (NOTE_FONT_SIZE * TEXT_LINE_HEIGHT)));
@@ -37,10 +56,10 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
           <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={3} fill={el.fill} filter="url(#wb-shadow)" />
           {el.docId && (
             <g>
-              <text x={el.x + NOTE_PADDING} y={el.y + NOTE_PADDING + 10} fontSize={11} fontFamily="Roboto, sans-serif" fontWeight={600} fill="#5d4037">
+              <text x={el.x + NOTE_PADDING} y={el.y + NOTE_PADDING + 10} fontSize={11} fontFamily={UI_FONT} fontWeight={600} fill="#5d4037">
                 SCENE{docTitle ? '' : ' (deleted)'}
               </text>
-              <text x={el.x + el.w - 22} y={el.y + 20} fontSize={15} fontFamily="Roboto, sans-serif" fill="#5d4037" style={{ cursor: 'pointer' }}>
+              <text x={el.x + el.w - 22} y={el.y + 20} fontSize={15} fontFamily={UI_FONT} fill="#5d4037" style={{ cursor: 'pointer' }}>
                 ↗
               </text>
             </g>
@@ -68,5 +87,91 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
         </text>
       );
     }
+    case 'image':
+      return <ImageView el={el} />;
+    case 'card':
+      return <CardView el={el} />;
+    case 'frame':
+      return <FrameView el={el} hideText={hideText} />;
   }
 });
+
+function ImageView({ el }: { el: WbImage }) {
+  const url = useAssetUrl(el.assetId);
+  if (!url)
+    return (
+      <g>
+        <rect x={el.x} y={el.y} width={el.w} height={el.h} fill="rgba(128,128,128,0.15)" stroke="rgba(128,128,128,0.5)" strokeDasharray="6 4" />
+        <text x={el.x + el.w / 2} y={el.y + el.h / 2} textAnchor="middle" fontSize={13} fontFamily={UI_FONT} fill="#888">
+          {el.name || 'Picture'}
+        </text>
+      </g>
+    );
+  return <image href={url} x={el.x} y={el.y} width={el.w} height={el.h} preserveAspectRatio="none" />;
+}
+
+const KIND_COLORS: Record<string, string> = { character: '#3949ab', location: '#00897b', item: '#ef6c00', lore: '#8e24aa' };
+
+function CardView({ el }: { el: WbCard }) {
+  const entry = useStore((s) => s.bible.find((b) => b.id === el.bibleId));
+  const portrait = useAssetUrl(entry?.imageAssetId ?? null);
+  const accent = entry?.color || (entry ? KIND_COLORS[entry.kind] : '#9e9e9e');
+  const pad = 12;
+  const imgSize = portrait ? Math.min(64, el.h - pad * 2) : 0;
+  const textW = el.w - pad * 2 - 6 - (imgSize ? imgSize + 10 : 0);
+  const detail = entry ? (entry.kind === 'character' ? [entry.role, entry.summary].filter(Boolean).join(' — ') : entry.summary) : 'This Story Bible entry was deleted.';
+  const lines = wrapText(detail || '', textW, 13, UI_FONT);
+  const maxLines = Math.max(0, Math.floor((el.h - 58) / 17));
+  return (
+    <g>
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="#ffffff" stroke="rgba(0,0,0,0.12)" filter="url(#wb-shadow)" />
+      <rect x={el.x} y={el.y} width={6} height={el.h} rx={3} fill={accent} />
+      <text x={el.x + pad + 6} y={el.y + pad + 9} fontSize={10.5} fontWeight={700} letterSpacing={0.8} fontFamily={UI_FONT} fill={accent}>
+        {entry ? BIBLE_KIND_LABELS[entry.kind].singular.toUpperCase() : 'STORY BIBLE'}
+      </text>
+      <text x={el.x + el.w - 22} y={el.y + 20} fontSize={15} fontFamily={UI_FONT} fill="#5d4037" style={{ cursor: 'pointer' }}>
+        ↗
+      </text>
+      <text x={el.x + pad + 6} y={el.y + pad + 30} fontSize={17} fontWeight={700} fontFamily={UI_FONT} fill="#212121">
+        {entry?.name ?? 'Missing entry'}
+      </text>
+      <text fontSize={13} fontFamily={UI_FONT} fill="#555">
+        {lines.slice(0, maxLines).map((line, i) => (
+          <tspan key={i} x={el.x + pad + 6} y={el.y + pad + 50 + i * 17}>
+            {i === maxLines - 1 && lines.length > maxLines ? `${line.slice(0, -1)}…` : line || ' '}
+          </tspan>
+        ))}
+      </text>
+      {portrait && (
+        <g>
+          <clipPath id={`wb-clip-${el.id}`}>
+            <circle cx={el.x + el.w - pad - imgSize / 2} cy={el.y + el.h / 2 + 6} r={imgSize / 2} />
+          </clipPath>
+          <image
+            href={portrait}
+            x={el.x + el.w - pad - imgSize}
+            y={el.y + el.h / 2 + 6 - imgSize / 2}
+            width={imgSize}
+            height={imgSize}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#wb-clip-${el.id})`}
+          />
+        </g>
+      )}
+    </g>
+  );
+}
+
+function FrameView({ el, hideText }: { el: WbFrame; hideText?: boolean }) {
+  const title = hideText ? '' : el.title || 'Frame';
+  const tabW = Math.min(el.w, Math.max(90, title.length * 8.5 + 28));
+  return (
+    <g>
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={10} fill={`${el.fill}26`} stroke={el.fill} strokeWidth={2} />
+      <rect x={el.x} y={el.y - FRAME_TITLE_H + 2} width={tabW} height={FRAME_TITLE_H} rx={8} fill={el.fill} />
+      <text x={el.x + 12} y={el.y - 8} fontSize={14} fontWeight={700} fontFamily={UI_FONT} fill="#1a1a1a">
+        {title}
+      </text>
+    </g>
+  );
+}

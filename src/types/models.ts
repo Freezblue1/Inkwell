@@ -366,6 +366,11 @@ export interface WbArrow extends WbBase {
   y1: number;
   x2: number;
   y2: number;
+  /** Elements the ends are attached to (they follow when those move). */
+  from?: ID | null;
+  to?: ID | null;
+  /** Optional label at the middle ("motive", "sister of"…). */
+  label?: string;
 }
 
 export interface WbNote extends WbBase {
@@ -389,7 +394,39 @@ export interface WbText extends WbBase {
   fontSize: number;
 }
 
-export type WbElement = WbPath | WbShape | WbArrow | WbNote | WbText;
+/** A picture stored in the project's assets. */
+export interface WbImage extends WbBase {
+  type: 'image';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  assetId: ID;
+  name: string;
+}
+
+/** A card showing a Story Bible entry (name, summary, portrait), kept up to date. */
+export interface WbCard extends WbBase {
+  type: 'card';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  bibleId: ID;
+}
+
+/** A titled area that groups what's inside it; moving it moves its contents. */
+export interface WbFrame extends WbBase {
+  type: 'frame';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title: string;
+  fill: string;
+}
+
+export type WbElement = WbPath | WbShape | WbArrow | WbNote | WbText | WbImage | WbCard | WbFrame;
 
 /** A freeform whiteboard (brainstorms, maps, mind maps). Several per project. */
 export interface Whiteboard {

@@ -2,6 +2,7 @@
 import type { WbElement } from '@/types/models';
 import { unionBounds } from '@/lib/whiteboard';
 import { downloadBlob, fileSafe } from '@/lib/export/download';
+import { blobToDataUrl } from '@/db/repos/assets';
 
 export async function exportWhiteboardPng(svg: SVGSVGElement, elements: WbElement[], background: string, name: string): Promise<void> {
   const b = unionBounds(elements);
@@ -23,6 +24,18 @@ export async function exportWhiteboardPng(svg: SVGSVGElement, elements: WbElemen
   bg.setAttribute('height', String(box.h));
   bg.setAttribute('fill', background);
   clone.insertBefore(bg, clone.firstChild);
+  // Pictures use blob: URLs, which an SVG rendered as an image can't load: inline them.
+  await Promise.all(
+    [...clone.querySelectorAll('image')].map(async (img) => {
+      const href = img.getAttribute('href');
+      if (!href?.startsWith('blob:')) return;
+      try {
+        img.setAttribute('href', await blobToDataUrl(await (await fetch(href)).blob()));
+      } catch {
+        img.remove();
+      }
+    }),
+  );
 
   const xml = new XMLSerializer().serializeToString(clone);
   const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));

@@ -2,6 +2,7 @@
 import type { ID, Whiteboard } from '@/types/models';
 import { db } from '../db';
 import { newId } from '@/lib/ids';
+import { copyElements } from '@/lib/whiteboard';
 
 export async function listWhiteboards(projectId: ID): Promise<Whiteboard[]> {
   const rows = await db.whiteboards.where('projectId').equals(projectId).toArray();
@@ -16,7 +17,7 @@ export function makeWhiteboard(projectId: ID, name: string, order: number): Whit
 /** A saved copy of a board (new ids for the board and its elements). */
 export function duplicateWhiteboard(wb: Whiteboard, name: string, order: number): Whiteboard {
   const now = Date.now();
-  return { ...wb, id: newId(), name, order, open: true, createdAt: now, updatedAt: now, elements: wb.elements.map((el) => ({ ...el, id: newId() })) };
+  return { ...wb, id: newId(), name, order, open: true, createdAt: now, updatedAt: now, elements: copyElements(wb.elements, newId) };
 }
 
 export const isOpen = (wb: Whiteboard) => wb.open !== false;

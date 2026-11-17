@@ -1,17 +1,28 @@
 /**
- * The whiteboard editor: an infinite SVG canvas with pen, shapes, arrows,
- * sticky notes, text and scene cards. Pan with the hand tool / Space /
- * middle mouse / wheel; Ctrl+wheel zooms at the cursor. Undo/redo, keyboard
- * shortcuts, autosave via `onSave`.
+ * The whiteboard editor: an infinite SVG canvas with pen, shapes, arrows
+ * (which stay attached to what they point at), sticky notes, text, frames,
+ * pictures, scene cards and Story Bible cards, plus a minimap. Pan with the
+ * hand tool / Space / middle mouse / wheel; Ctrl+wheel zooms at the cursor.
+ * Undo/redo, keyboard shortcuts, autosave via `onSave`.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as RPointerEvent, type SetStateAction } from 'react';
 import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ID, WbElement, Whiteboard } from '@/types/models';
 import { useStore } from '@/store';
 import { newId } from '@/lib/ids';
+import { addAsset } from '@/db/repos/assets';
+import { promptDialog } from '@/components/DialogHost';
 import {
+  attachableAt,
+  boundaryPoint,
+  containsRect,
+  copyElements,
   elementBounds,
+  elementsInFrame,
+  FRAME_COLORS,
+  paintOrder,
+  routeConnectors,
   moveElement,
   normalizeRect,
   rectsIntersect,
@@ -24,13 +35,14 @@ import {
 } from '@/lib/whiteboard';
 import { WbElementView, WB_FONT } from './WbElementView';
 import { TOOLS, WhiteboardToolbar, type WbStyle, type WbTool } from './WhiteboardToolbar';
+import { Minimap } from './Minimap';
 
 type Viewport = Whiteboard['viewport'];
 
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
-  | { kind: 'move'; start: Point; before: WbElement[]; moved: boolean }
-  | { kind: 'resize'; id: ID; end: 'end' | 'start'; before: WbElement[] }
+  | { kind: 'move'; start: Point; before: WbElement[]; moved: boolean; ids: Set<ID>; detach: Set<ID> }
+  | { kind: 'resize'; id: ID; end: 'end' | 'start'; before: WbElement[]; snap?: ID | null }
   | { kind: 'marquee'; start: Point; current: Point; additive: boolean }
   | { kind: 'draw'; start: Point }
   /** Note/text placement waits for pointer-up, after the browser has moved focus. */
@@ -45,6 +57,10 @@ export interface WhiteboardHandle {
   svg: () => SVGSVGElement | null;
   elements: () => WbElement[];
   addElement: (el: WbElement) => void;
+  /** Adds several elements centred in the view (templates); fits the view when the board was empty. */
+  addElements: (els: WbElement[]) => void;
+  /** Opens the file picker for pictures. */
+  pickImages: () => void;
   center: () => Point;
   clear: () => void;
 }
@@ -60,7 +76,21 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const theme = useTheme();
   const docs = useStore((s) => s.docs);
   const ink = theme.palette.text.primary;
-  const [elements, setElements] = useState<WbElement[]>(board.elements);
+  const [elements, setElementsRaw] = useState<WbElement[]>(() => routeConnectors(board.elements));
+  /** Every change re-routes attached arrows, so they follow what they point at. */
+  const setElements = useCallback((next: SetStateAction<WbElement[]>) => {
+    setElementsRaw((prev) => routeConnectors(typeof next === 'function' ? next(prev) : next));
+  }, []);
+  const [snapId, setSnapId] = useState<ID | null>(null);
+  const [minimap, setMinimap] = useState(() => {
+    try {
+      return localStorage.getItem('inkwell:wb:minimap') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const [size, setSize] = useState({ w: 800, h: 600 });
+  const fileRef = useRef<HTMLInputElement>(null);
   const [vp, setVp] = useState<Viewport>(board.viewport);
   const [tool, setTool] = useState<WbTool>('select');
   const [style, setStyleState] = useState<WbStyle>({ color: 'ink', strokeWidth: 4, noteColor: '#fff59d', filled: false });
@@ -98,8 +128,21 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       pushHistory(elementsRef.current);
       setElements(next);
     },
-    [pushHistory],
+    [pushHistory, setElements],
   );
+  const painted = useMemo(() => paintOrder(elements), [elements]);
+
+  // Track the canvas size (minimap, centring).
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const r = svg.getBoundingClientRect();
+      if (r.width && r.height) setSize({ w: r.width, h: r.height });
+    });
+    ro.observe(svg);
+    return () => ro.disconnect();
+  }, []);
 
   const undo = () => {
     const h = history.current;
@@ -134,6 +177,18 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         setSelected([el.id]);
         setTool('select');
       },
+      addElements: (els) => {
+        if (!els.length) return;
+        const wasEmpty = elementsRef.current.length === 0;
+        const b = unionBounds(els)!;
+        const c = center();
+        const placed = copyElements(els, newId, c.x - (b.x + b.w / 2), c.y - (b.y + b.h / 2));
+        commit([...elementsRef.current, ...placed]);
+        setSelected(placed.map((e) => e.id));
+        setTool('select');
+        if (wasEmpty) requestAnimationFrame(() => fitRef.current());
+      },
+      pickImages: () => fileRef.current?.click(),
       center,
       clear: () => {
         commit([]);
@@ -158,6 +213,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     });
   }, []);
 
+  const fitRef = useRef<() => void>(() => {});
   const fit = useCallback(() => {
     const b = unionBounds(elementsRef.current);
     const r = svgRef.current?.getBoundingClientRect();
@@ -167,6 +223,35 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min((r.width - pad * 2) / Math.max(b.w, 1), (r.height - pad * 2 - 60) / Math.max(b.h, 1), 1.5)));
     setVp({ zoom, x: r.width / 2 - (b.x + b.w / 2) * zoom, y: r.height / 2 + 30 - (b.y + b.h / 2) * zoom });
   }, []);
+  fitRef.current = fit;
+
+  /** Adds picture files as image elements (stored in the project's assets). */
+  const insertImages = useCallback(
+    async (files: File[], at?: Point) => {
+      const projectId = useStore.getState().project?.id;
+      const images = files.filter((f) => f.type.startsWith('image/'));
+      if (!projectId || !images.length) return;
+      const origin = at ?? center();
+      const added: WbElement[] = [];
+      for (const [i, file] of images.entries()) {
+        try {
+          const asset = await addAsset(projectId, file);
+          const dims = await imageSize(file);
+          const scale = Math.min(1, 480 / dims.w, 480 / dims.h);
+          const w = Math.max(40, dims.w * scale);
+          const h = Math.max(40, dims.h * scale);
+          added.push({ id: newId(), type: 'image', x: origin.x - w / 2 + i * 30, y: origin.y - h / 2 + i * 30, w, h, assetId: asset.id, name: file.name, color: 'ink', strokeWidth: 1 });
+        } catch (e) {
+          useStore.getState().notify(e instanceof Error ? e.message : `Could not add ${file.name}`, 'error');
+        }
+      }
+      if (!added.length) return;
+      commit([...elementsRef.current, ...added]);
+      setSelected(added.map((e) => e.id));
+      setTool('select');
+    },
+    [center, commit],
+  );
 
   // Wheel: pan, or zoom with Ctrl/⌘ (pinch on trackpads). Native listener so we can preventDefault.
   useEffect(() => {
@@ -213,7 +298,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   };
 
   const eraseAt = (p: Point): boolean => {
-    const hit = topmostAt(elementsRef.current, p, 8 / vp.zoom);
+    const hit = topmostAt(paintOrder(elementsRef.current), p, 8 / vp.zoom);
     if (!hit) return false;
     setElements((els) => els.filter((e) => e.id !== hit.id));
     return true;
@@ -237,7 +322,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           drag.current = { kind: 'resize', id: single.id, end: handle, before: elements };
           return;
         }
-        const hit = topmostAt(elements, p, tol);
+        const hit = topmostAt(painted, p, tol);
         if (hit) {
           // Scene cards: the ↗ corner opens the linked document.
           if (hit.type === 'note' && hit.docId && p.x >= hit.x + hit.w - 28 && p.y <= hit.y + 28) {
@@ -245,8 +330,14 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
             else useStore.getState().notify('That scene no longer exists.', 'warning');
             return;
           }
-          if (!selected.includes(hit.id)) setSelected(e.shiftKey ? [...selected, hit.id] : [hit.id]);
-          drag.current = { kind: 'move', start: p, before: elements, moved: false };
+          // Story Bible cards: the ↗ corner opens the entry.
+          if (hit.type === 'card' && p.x >= hit.x + hit.w - 28 && p.y <= hit.y + 28) {
+            openBible(hit.bibleId);
+            return;
+          }
+          const sel = selected.includes(hit.id) ? selected : e.shiftKey ? [...selected, hit.id] : [hit.id];
+          if (!selected.includes(hit.id)) setSelected(sel);
+          drag.current = { kind: 'move', start: p, before: elements, moved: false, ...moveSet(sel) };
         } else {
           if (!e.shiftKey) setSelected([]);
           drag.current = { kind: 'marquee', start: p, current: p, additive: e.shiftKey };
@@ -262,10 +353,19 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         setDraft({ id: newId(), type: tool, x: p.x, y: p.y, w: 0, h: 0, fill: shapeFill(style.color), color: style.color, strokeWidth: style.strokeWidth });
         drag.current = { kind: 'draw', start: p };
         return;
-      case 'arrow':
-        setDraft({ id: newId(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: style.color, strokeWidth: style.strokeWidth });
+      case 'arrow': {
+        // Starting on a note, shape, card or picture attaches the arrow to it.
+        const src = attachableAt(painted, p, tol);
+        setDraft({ id: newId(), type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: style.color, strokeWidth: style.strokeWidth, from: src?.id ?? null, to: null });
         drag.current = { kind: 'draw', start: p };
         return;
+      }
+      case 'frame': {
+        const n = elements.filter((el) => el.type === 'frame').length;
+        setDraft({ id: newId(), type: 'frame', x: p.x, y: p.y, w: 0, h: 0, title: `Frame ${n + 1}`, fill: FRAME_COLORS[n % FRAME_COLORS.length], color: 'ink', strokeWidth: 2 });
+        drag.current = { kind: 'draw', start: p };
+        return;
+      }
       case 'note':
       case 'text':
         // Creating the editor here would lose focus to the mousedown that follows.
@@ -296,19 +396,30 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         const dy = p.y - d.start.y;
         if (!d.moved && Math.hypot(dx, dy) * vp.zoom < 3) return;
         d.moved = true;
-        const ids = new Set(selected);
-        setElements(d.before.map((el) => (ids.has(el.id) ? moveElement(el, dx, dy) : el)));
-        return;
-      }
-      case 'resize':
         setElements(
           d.before.map((el) => {
-            if (el.id !== d.id) return el;
-            if (el.type === 'arrow' && d.end === 'start') return { ...el, x1: p.x, y1: p.y };
-            return resizeElement(el, p);
+            if (!d.ids.has(el.id)) return el;
+            const m = moveElement(el, dx, dy);
+            // An arrow dragged on its own lets go of what it was attached to.
+            return m.type === 'arrow' && d.detach.has(el.id) ? { ...m, from: null, to: null } : m;
           }),
         );
         return;
+      }
+      case 'resize': {
+        const target = d.before.find((el) => el.id === d.id);
+        if (target?.type === 'arrow') {
+          // Dragging an arrow end: it follows the pointer and can snap onto something.
+          const other = d.end === 'end' ? target.from : target.to;
+          const snap = attachableAt(painted, p, 6 / vp.zoom, other ?? undefined);
+          d.snap = snap?.id ?? null;
+          setSnapId(d.snap);
+          setElements(d.before.map((el) => (el.id !== d.id || el.type !== 'arrow' ? el : d.end === 'start' ? { ...el, x1: p.x, y1: p.y, from: null } : { ...el, x2: p.x, y2: p.y, to: null })));
+          return;
+        }
+        setElements(d.before.map((el) => (el.id === d.id ? resizeElement(el, p) : el)));
+        return;
+      }
       case 'marquee':
         d.current = p;
         setMarquee(normalizeRect(d.start.x, d.start.y, p.x, p.y));
@@ -321,8 +432,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
             if (Math.hypot(p.x - last[0], p.y - last[1]) * vp.zoom < 1.5) return cur;
             return { ...cur, points: [...cur.points, [p.x, p.y]] };
           }
-          if (cur.type === 'arrow') return { ...cur, x2: p.x, y2: p.y };
-          if (cur.type === 'rect' || cur.type === 'ellipse') {
+          if (cur.type === 'arrow') {
+            const snap = attachableAt(painted, p, 6 / vp.zoom, cur.from ?? undefined);
+            setSnapId(snap?.id ?? null);
+            return { ...cur, x2: p.x, y2: p.y, to: snap?.id ?? null };
+          }
+          if (cur.type === 'rect' || cur.type === 'ellipse' || cur.type === 'frame') {
             let r = normalizeRect(d.start.x, d.start.y, p.x, p.y);
             if (e.shiftKey) {
               const s = Math.max(r.w, r.h);
@@ -342,6 +457,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const onPointerUp = () => {
     const d = drag.current;
     drag.current = null;
+    setSnapId(null);
     if (!d) return;
     switch (d.kind) {
       case 'place':
@@ -351,6 +467,10 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         if (d.moved) pushHistory(d.before);
         return;
       case 'resize':
+        if (d.snap) {
+          const snap = d.snap;
+          setElements((els) => els.map((el) => (el.id === d.id && el.type === 'arrow' ? (d.end === 'start' ? { ...el, from: snap } : { ...el, to: snap }) : el)));
+        }
         pushHistory(d.before);
         return;
       case 'erase':
@@ -360,7 +480,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         const r = normalizeRect(d.start.x, d.start.y, d.current.x, d.current.y);
         setMarquee(null);
         if (r.w * vp.zoom < 3 && r.h * vp.zoom < 3) return;
-        const ids = elements.filter((el) => rectsIntersect(elementBounds(el), r)).map((el) => el.id);
+        // Frames are picked only when the box covers them completely.
+        const ids = elements.filter((el) => (el.type === 'frame' ? containsRect(r, elementBounds(el)) : rectsIntersect(elementBounds(el), r))).map((el) => el.id);
         setSelected((cur) => (d.additive ? [...new Set([...cur, ...ids])] : ids));
         return;
       }
@@ -371,7 +492,9 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         let finished: WbElement | null = el;
         if (el.type === 'path') finished = { ...el, points: simplifyPoints(el.points, 1.5 / vp.zoom) };
         if ((el.type === 'rect' || el.type === 'ellipse') && el.w < 4 && el.h < 4) finished = { ...el, x: el.x - 60, y: el.y - 40, w: 120, h: 80 };
-        if (el.type === 'arrow' && Math.hypot(el.x2 - el.x1, el.y2 - el.y1) < 4) finished = { ...el, x2: el.x1 + 120 };
+        if (el.type === 'frame' && el.w < 40 && el.h < 40) finished = { ...el, x: el.x - 240, y: el.y - 160, w: 480, h: 320 };
+        if (el.type === 'arrow' && !el.to && Math.hypot(el.x2 - el.x1, el.y2 - el.y1) < 4) finished = { ...el, x2: el.x1 + 120 };
+        if (el.type === 'arrow' && el.to && el.to === el.from) finished = { ...el, to: null };
         if (finished) commit([...elementsRef.current, finished]);
         return;
       }
@@ -381,11 +504,67 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const onDoubleClick = (e: MouseEvent<SVGSVGElement>) => {
     if (tool !== 'select') return;
     const p = toWorld(e.clientX, e.clientY);
-    const hit = topmostAt(elements, p, 6 / vp.zoom);
+    const hit = topmostAt(painted, p, 6 / vp.zoom);
     if (hit && (hit.type === 'note' || hit.type === 'text')) {
       setSelected([hit.id]);
       setEditingId(hit.id);
-    } else if (!hit) createAt('note', p);
+    } else if (hit?.type === 'card') openBible(hit.bibleId);
+    else if (hit?.type === 'arrow' || hit?.type === 'frame') void renameElement(hit);
+    else if (!hit) createAt('note', p);
+  };
+
+  const openBible = (id: ID) => {
+    if (useStore.getState().bible.some((b) => b.id === id)) useStore.getState().openBibleEntry(id);
+    else useStore.getState().notify('That Story Bible entry no longer exists.', 'warning');
+  };
+
+  /** Elements to move with a selection: frames carry what's inside them; lone arrows let go. */
+  const moveSet = (sel: ID[]): { ids: Set<ID>; detach: Set<ID> } => {
+    const ids = new Set(sel);
+    for (const el of elements) if (ids.has(el.id) && el.type === 'frame') elementsInFrame(el, elements).forEach((id) => ids.add(id));
+    const detach = new Set<ID>();
+    for (const el of elements) {
+      if (el.type !== 'arrow' || !ids.has(el.id) || (!el.from && !el.to)) continue;
+      const targetsMove = (el.from && ids.has(el.from)) || (el.to && ids.has(el.to));
+      if (!targetsMove) detach.add(el.id);
+    }
+    return { ids, detach };
+  };
+
+  /** Arrow label / frame title. */
+  const renameElement = async (el: WbElement) => {
+    if (el.type !== 'arrow' && el.type !== 'frame') return;
+    const v = await promptDialog(
+      el.type === 'arrow' ? { title: 'Arrow label', label: 'Label (leave empty for none)', initial: el.label ?? '' } : { title: 'Frame title', label: 'Title', initial: el.title },
+    );
+    if (v === null) return;
+    commit(elementsRef.current.map((x) => (x.id !== el.id ? x : x.type === 'arrow' ? { ...x, label: v.trim() || undefined } : x.type === 'frame' ? { ...x, title: v.trim() || 'Frame' } : x)));
+    wrapRef.current?.focus({ preventScroll: true });
+  };
+
+  const toggleMinimap = () =>
+    setMinimap((m) => {
+      try {
+        localStorage.setItem('inkwell:wb:minimap', m ? 'off' : 'on');
+      } catch {
+        /* ignore */
+      }
+      return !m;
+    });
+
+  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    if (editingId) return;
+    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    void insertImages(files);
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    void insertImages(files, toWorld(e.clientX, e.clientY));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -406,7 +585,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     }
     if (mod && k === 'd' && selectedEls.length) {
       e.preventDefault();
-      const copies = selectedEls.map((el) => ({ ...moveElement(el, 24, 24), id: newId() }));
+      const withContents = moveSet(selected).ids;
+      const copies = copyElements(elements.filter((el) => withContents.has(el.id)), newId, 24, 24);
       commit([...elements, ...copies]);
       setSelected(copies.map((c) => c.id));
       return;
@@ -423,13 +603,18 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       setEditingId(single.id);
       return;
     }
+    if (e.key === 'Enter' && single && (single.type === 'arrow' || single.type === 'frame')) {
+      e.preventDefault();
+      void renameElement(single);
+      return;
+    }
     if (e.key.startsWith('Arrow') && selected.length) {
       e.preventDefault();
       const step = e.shiftKey ? 20 : 2;
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-      const ids = new Set(selected);
-      commit(elements.map((el) => (ids.has(el.id) ? moveElement(el, dx, dy) : el)));
+      const { ids, detach } = moveSet(selected);
+      commit(elements.map((el) => (!ids.has(el.id) ? el : detach.has(el.id) && el.type === 'arrow' ? { ...moveElement(el, dx, dy), from: null, to: null } : moveElement(el, dx, dy))));
       return;
     }
     if (e.key === ' ') {
@@ -442,6 +627,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       if (e.key === '+' || e.key === '=') return zoomAt(1.25);
       if (e.key === '-') return zoomAt(1 / 1.25);
       if (e.key === '0') return setVp((v) => ({ ...v, zoom: 1 }));
+      if (k === 'm') return toggleMinimap();
+      if (k === 'i') return fileRef.current?.click();
       const t = TOOLS.find((x) => x.key.toLowerCase() === k);
       if (t) setTool(t.value);
     }
@@ -477,6 +664,21 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const boardBg = theme.inkwell.jungle ? '#10261a' : theme.palette.mode === 'dark' ? '#1f2027' : '#fbfbf8';
   const gridColor = theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
   const docTitles = (id: ID | null) => (id ? docs[id]?.title : undefined);
+  const snapEl = snapId ? elements.find((el) => el.id === snapId) : undefined;
+  const snapTarget = snapEl ? elementBounds(snapEl) : null;
+  // The arrow being drawn, with its start (and snapped end) on the outlines.
+  const draftView = useMemo(() => {
+    if (!draft || draft.type !== 'arrow' || (!draft.from && !draft.to)) return draft;
+    const src = draft.from ? elements.find((el) => el.id === draft.from) : undefined;
+    const dst = draft.to ? elements.find((el) => el.id === draft.to) : undefined;
+    const mid = (el: WbElement) => {
+      const b = elementBounds(el);
+      return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    };
+    const end = dst ? boundaryPoint(dst, src ? mid(src) : { x: draft.x1, y: draft.y1 }) : { x: draft.x2, y: draft.y2 };
+    const start = src ? boundaryPoint(src, dst ? mid(dst) : end) : { x: draft.x1, y: draft.y1 };
+    return { ...draft, x1: start.x, y1: start.y, x2: end.x, y2: end.y };
+  }, [draft, elements]);
 
   return (
     <Box
@@ -484,6 +686,11 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       tabIndex={0}
       onKeyDown={onKeyDown}
       onKeyUp={(e) => e.key === ' ' && setSpaceDown(false)}
+      onPaste={onPaste}
+      onDragOver={(e) => {
+        if ([...e.dataTransfer.items].some((i) => i.kind === 'file')) e.preventDefault();
+      }}
+      onDrop={onDrop}
       aria-label="Whiteboard canvas. Press V, P, R, O, A, N, T or E to switch tools."
       sx={{ position: 'relative', flex: 1, minHeight: 0, outline: 'none', bgcolor: boardBg, overflow: 'hidden' }}
     >
@@ -500,6 +707,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
               elements.map((el) => {
                 if (!ids.has(el.id)) return el;
                 if (el.type === 'note') return patch.noteColor ? { ...el, fill: patch.noteColor } : el;
+                if (el.type === 'frame') return patch.color && patch.color !== 'ink' ? { ...el, fill: patch.color } : el;
+                if (el.type === 'image' || el.type === 'card') return el;
                 return { ...el, ...(patch.color ? { color: patch.color } : {}), ...(patch.strokeWidth ? { strokeWidth: patch.strokeWidth } : {}) };
               }),
             );
@@ -512,6 +721,21 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         canRedo={history.current.future.length > 0}
         onUndo={undo}
         onRedo={redo}
+        minimap={minimap}
+        onToggleMinimap={toggleMinimap}
+        onPickImage={() => fileRef.current?.click()}
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = '';
+          void insertImages(files);
+        }}
       />
       <svg
         ref={svgRef}
@@ -539,11 +763,23 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         </defs>
         {board.background !== 'plain' && <rect className="wb-bg" width="100%" height="100%" fill={`url(#wb-${board.background})`} />}
         <g className="wb-world" transform={`translate(${vp.x} ${vp.y}) scale(${vp.zoom})`}>
-          {elements.map((el) => (
-            <WbElementView key={el.id} el={el} ink={ink} hideText={el.id === editingId} docTitle={el.type === 'note' ? docTitles(el.docId) : undefined} />
+          {painted.map((el) => (
+            <WbElementView key={el.id} el={el} ink={ink} paper={theme.palette.background.paper} hideText={el.id === editingId} docTitle={el.type === 'note' ? docTitles(el.docId) : undefined} />
           ))}
-          {draft && <WbElementView el={draft} ink={ink} />}
+          {draftView && <WbElementView el={draftView} ink={ink} paper={theme.palette.background.paper} />}
           <g className="wb-ui">
+            {snapTarget && (
+              <rect
+                x={snapTarget.x - 6 / vp.zoom}
+                y={snapTarget.y - 6 / vp.zoom}
+                width={snapTarget.w + 12 / vp.zoom}
+                height={snapTarget.h + 12 / vp.zoom}
+                rx={8 / vp.zoom}
+                fill="none"
+                stroke={theme.palette.secondary.main}
+                strokeWidth={3 / vp.zoom}
+              />
+            )}
             {selBounds && !editingId && (
               <rect
                 x={selBounds.x - 4 / vp.zoom}
@@ -587,11 +823,22 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         />
       )}
 
+      {minimap && elements.length > 0 && (
+        <Minimap
+          elements={painted}
+          vp={vp}
+          width={size.w}
+          height={size.h}
+          ink={ink}
+          onCenter={(p) => setVp((v) => ({ ...v, x: size.w / 2 - p.x * v.zoom, y: size.h / 2 - p.y * v.zoom }))}
+        />
+      )}
+
       {elements.length === 0 && !draft && (
         <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', color: 'text.secondary', textAlign: 'center', px: 3 }}>
           <Box>
             <Box sx={{ fontFamily: WB_FONT, fontSize: 32, mb: 1 }}>A blank board for big ideas</Box>
-            <Box sx={{ fontSize: 14 }}>Double-click for a sticky note · P to draw · A for arrows · drag scenes in with “Add scene card”</Box>
+            <Box sx={{ fontSize: 14 }}>Double-click for a sticky note · P to draw · A for arrows · F for frames · drop or paste pictures · or start from a template</Box>
           </Box>
         </Box>
       )}
@@ -651,3 +898,20 @@ function EditOverlay({ el, vp, color, onDone }: { el: Extract<WbElement, { type:
   );
 }
 
+
+/** Natural pixel size of an image file. */
+function imageSize(file: Blob): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      resolve({ w: img.naturalWidth || 320, h: img.naturalHeight || 240 });
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      resolve({ w: 320, h: 240 });
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
