@@ -308,7 +308,7 @@ export function HomePage() {
   };
 
   return (
-    <Box component="main" aria-label="Home" sx={{ height: '100%', overflow: 'auto', bgcolor: (t) => (t.inkwell.jungle ? 'transparent' : t.palette.background.default) }}>
+    <Box component="main" aria-label="Home" sx={{ height: '100%', overflow: 'auto', bgcolor: (t) => (t.inkwell.scene ? 'transparent' : t.palette.background.default) }}>
       <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, sm: 3 } }}>
         {/* Header */}
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>

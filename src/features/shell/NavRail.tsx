@@ -4,7 +4,6 @@ import StickyNote2Icon from '@mui/icons-material/StickyNote2Outlined';
 import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import { useStore } from '@/store';
 import { NAV_ITEMS } from './navigation';
-import { BAMBOO } from '@/theme/jungle';
 
 /** Material 3 navigation rail with the six main sections. */
 export function NavRail() {
@@ -22,9 +21,8 @@ export function NavRail() {
         flex: '0 0 84px',
         borderRight: 1,
         borderColor: 'divider',
-        bgcolor: 'background.paper',
-        // Jungle: a bamboo stalk.
-        backgroundImage: (t) => (t.inkwell.jungle ? BAMBOO : 'none'),
+        // Illustrated themes: bamboo, bookshelves, bubbles…
+        background: (t) => t.inkwell.rail ?? t.palette.background.paper,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

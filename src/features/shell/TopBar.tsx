@@ -33,6 +33,11 @@ import SettingsIcon from '@mui/icons-material/SettingsOutlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import ForestIcon from '@mui/icons-material/ForestOutlined';
+import WavesIcon from '@mui/icons-material/Waves';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunchOutlined';
+import LocalLibraryIcon from '@mui/icons-material/LocalLibraryOutlined';
+import LocalFloristIcon from '@mui/icons-material/LocalFloristOutlined';
+import { SCENE_LIST, type SceneId } from '@/theme/scenes';
 import InstallDesktopIcon from '@mui/icons-material/InstallDesktop';
 import { usePwa } from '@/features/pwa/pwaStore';
 import { useStore } from '@/store';
@@ -42,6 +47,14 @@ import { dayKey } from '@/lib/dates';
 import { SaveIndicator } from './SaveIndicator';
 import { ProjectTitle } from './ProjectTitle';
 import type { ThemeMode } from '@/types/models';
+
+export const SCENE_ICONS: Record<SceneId, typeof ForestIcon> = {
+  jungle: ForestIcon,
+  ocean: WavesIcon,
+  space: RocketLaunchIcon,
+  library: LocalLibraryIcon,
+  sakura: LocalFloristIcon,
+};
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? '⌘' : 'Ctrl';
@@ -71,7 +84,7 @@ export function TopBar() {
   const sessionWords = sessionStart === null ? 0 : total - sessionStart;
   const pct = goal?.targetWords ? Math.min(100, Math.round((total / goal.targetWords) * 100)) : null;
 
-  const ThemeIcon = themeMode === 'light' ? LightModeIcon : themeMode === 'dark' ? DarkModeIcon : themeMode === 'jungle' ? ForestIcon : SettingsBrightnessIcon;
+  const ThemeIcon = themeMode === 'light' ? LightModeIcon : themeMode === 'dark' ? DarkModeIcon : themeMode === 'system' ? SettingsBrightnessIcon : SCENE_ICONS[themeMode as SceneId] ?? SettingsBrightnessIcon;
   const setTheme = (m: ThemeMode) => {
     updateSettings({ themeMode: m });
     setThemeAnchor(null);
@@ -197,12 +210,17 @@ export function TopBar() {
             Match system
           </MenuItem>
           <Divider />
-          <MenuItem selected={themeMode === 'jungle'} onClick={() => setTheme('jungle')}>
-            <ListItemIcon>
-              <ForestIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Jungle" secondary="Canopy greens & hanging vines" />
-          </MenuItem>
+          {SCENE_LIST.map((sc) => {
+            const Icon = SCENE_ICONS[sc.id];
+            return (
+              <MenuItem key={sc.id} selected={themeMode === sc.id} onClick={() => setTheme(sc.id)}>
+                <ListItemIcon>
+                  <Icon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary={sc.name} secondary={sc.tagline} />
+              </MenuItem>
+            );
+          })}
         </Menu>
 
         {layout !== 'mobile' && (

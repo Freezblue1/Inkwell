@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Box,
+  ButtonBase,
   Button,
   Dialog,
   DialogActions,
@@ -15,6 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useStore } from '@/store';
+import { SCENE_LIST, sceneOf } from '@/theme/scenes';
 import { getStorageInfo, requestPersistentStorage, type StorageInfo } from '@/db/db';
 import { EditorSettingsForm } from '@/features/editor/EditorSettingsForm';
 import { InstallAppCard } from '@/features/pwa/InstallAppCard';
@@ -56,15 +58,7 @@ export default function SettingsDialog() {
                   <ToggleButton value="light">Light</ToggleButton>
                   <ToggleButton value="dark">Dark</ToggleButton>
                   <ToggleButton value="system">System</ToggleButton>
-                  <ToggleButton value="jungle">Jungle</ToggleButton>
                 </ToggleButtonGroup>
-                {settings.themeMode === 'jungle' && (
-                  <FormControlLabel
-                    sx={{ display: 'flex', mt: 1 }}
-                    control={<Switch checked={settings.jungleDecor !== false} onChange={(e) => update({ jungleDecor: e.target.checked })} />}
-                    label="Hanging vines, foliage & fireflies"
-                  />
-                )}
               </Box>
               <Box>
                 <Typography variant="body2" gutterBottom>
@@ -76,6 +70,55 @@ export default function SettingsDialog() {
                 </ToggleButtonGroup>
               </Box>
             </Stack>
+            <Typography variant="body2" sx={{ mt: 2, mb: 1 }}>
+              Illustrated themes
+            </Typography>
+            <Box role="radiogroup" aria-label="Illustrated themes" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' }, gap: 1 }}>
+              {SCENE_LIST.map((sc) => {
+                const selected = settings.themeMode === sc.id;
+                return (
+                  <ButtonBase
+                    key={sc.id}
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`${sc.name}: ${sc.tagline}`}
+                    onClick={() => update({ themeMode: sc.id })}
+                    sx={{
+                      display: 'block',
+                      textAlign: 'left',
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      border: 2,
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    <Box sx={{ height: 54, background: sc.preview, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', px: 1, pb: 0.5 }}>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        {[sc.primary.main, sc.secondary.main, sc.page.pageBg].map((c) => (
+                          <Box key={c} sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: c, border: '1px solid rgba(0,0,0,0.25)' }} />
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box sx={{ px: 1, py: 0.75 }}>
+                      <Typography variant="subtitle2" sx={{ fontFamily: sc.displayFont, fontWeight: sc.headingWeight, lineHeight: 1.3 }}>
+                        {sc.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.3 }}>
+                        {sc.tagline}
+                      </Typography>
+                    </Box>
+                  </ButtonBase>
+                );
+              })}
+            </Box>
+            {sceneOf(settings.themeMode) && (
+              <FormControlLabel
+                sx={{ display: 'flex', mt: 1 }}
+                control={<Switch checked={settings.jungleDecor !== false} onChange={(e) => update({ jungleDecor: e.target.checked })} />}
+                label={`Animated decorations: ${sceneOf(settings.themeMode)!.decorLabel.toLowerCase()}`}
+              />
+            )}
           </Box>
 
           <Box>

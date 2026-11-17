@@ -71,7 +71,7 @@ Also: RTF, OpenDocument (`.odt`), EPUB from any app, HTML and plain text. Choose
 - **Left out:** pictures (add them to Research), comments and Scrivener annotations, labels and snapshots. Old `.doc` and Pages files need saving as `.docx` first; the importer explains how.
 - **Code:** readers live in `src/lib/import/` (one per format, all producing the same block model), `structure.ts` finds chapters and scenes, and `src/db/importManuscript.ts` writes the result. Word uses mammoth, Markdown uses marked, PDF uses pdf.js (loaded only when you import a PDF; cached for offline use).
 
-## Whiteboard, special chapters and the jungle theme
+## Whiteboard, special chapters and illustrated themes
 
 - **Whiteboard** (Plan → Whiteboard): an infinite canvas for brainstorming and story maps. Boards are **tabs**: **+** adds one; double-click a tab (or F2) to rename; right-click to save a copy as a new tab, move it left or right, close it or delete it. Closing a tab keeps the board saved under **All boards** (the folder icon), where you can reopen it. Each tab keeps its own undo history and autosaves; a dot marks unsaved changes, and Ctrl+S or the save icon saves all boards immediately. Tools: select (V), pan (H or hold Space), pen (P), rectangle (R), ellipse (O), arrow (A), sticky note (N, or double-click), text (T), frame (F), eraser (E), picture (I). Drag to move, use the corner handle to resize, Shift-click or drag a box to multi-select, Ctrl+D to duplicate, Delete to remove, arrow keys to nudge, Ctrl+Z / Ctrl+Shift+Z to undo and redo. Ctrl+wheel zooms; the wheel pans. Boards autosave, are included in `.inkwell` backups and export to PNG.
   - **Attached arrows:** start or end an arrow on a note, shape, card or picture and it stays attached when you move things (the target lights up while you draw). Drag an arrow's end handle to re-attach it; dragging an arrow on its own lets go. Double-click an arrow (or press Enter) to give it a label.
@@ -81,7 +81,13 @@ Also: RTF, OpenDocument (`.odt`), EPUB from any app, HTML and plain text. Choose
   - **Minimap** (M): an overview in the corner; click or drag it to move the view.
   - **Templates:** plot diagram, three-act structure, murder board, family tree, and a character web built from your Story Bible characters and relationships.
 - **Special chapters:** binder **+ → Special chapters** (Prologue, Foreword, Introduction, Interlude, Epilogue, Afterword, or a custom heading such as "Coda"). Prologues and forewords go before chapter one, epilogues and afterwords at the end, and interludes after the chapter you're in. You can also convert any chapter: right-click → **Chapter type**, or Inspector → Metadata. Special chapters are compiled unnumbered under their own heading ("Prologue", with the title underneath) and don't affect "Chapter One, Two…" numbering, including in the table of contents.
-- **Jungle theme:** theme menu → **Jungle**, or Settings → Theme. Canopy greens, mango accents, parchment pages, adventure-style headings, a bamboo navigation rail, hanging vines with hibiscus flowers, corner foliage and fireflies. The decorations never block clicks, stop swaying if you prefer reduced motion, and can be switched off in Settings.
+- **Illustrated themes:** theme menu (top bar) or Settings → Appearance. Each has its own palette, heading font, textured app bar and navigation rail, themed dialogs and writing page, and animated decorations:
+  - **Jungle:** canopy greens, mango accents, parchment pages, a bamboo rail, hanging vines with hibiscus flowers, corner foliage and fireflies.
+  - **Ocean:** deep-sea blues and coral, a sea-foam page, sun rays from the surface, rising bubbles, swaying kelp, a school of fish and a drifting jellyfish.
+  - **Space:** a starfield with nebula glows, violet and star-gold accents, a night-sky page, twinkling and shooting stars, a ringed planet with an orbiting moon and a floating astronaut.
+  - **Cozy Library:** dark wood, brass and burgundy, a bookshelf rail, an aged-paper page, a swaying pendant lamp, a flickering candle, dust motes and a sleeping cat on a stack of books.
+  - **Sakura:** a light theme in blossom pink with a cherry branch, drifting petals and a faint distant mountain.
+  Decorations never block clicks, stay clear of the toolbar buttons, stop moving if you prefer reduced motion, and can be switched off in Settings. Themes live in `src/theme/scenes.ts`; decorations in `src/features/shell/decor/`.
 
 ## Install as an app (PWA)
 

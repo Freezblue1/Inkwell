@@ -661,7 +661,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
 
   const cursor = spaceDown || tool === 'hand' ? 'grab' : tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : 'crosshair';
   const selBounds = unionBounds(selectedEls);
-  const boardBg = theme.inkwell.jungle ? '#10261a' : theme.palette.mode === 'dark' ? '#1f2027' : '#fbfbf8';
+  const boardBg = theme.inkwell.board ? theme.inkwell.board : theme.palette.mode === 'dark' ? '#1f2027' : '#fbfbf8';
   const gridColor = theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
   const docTitles = (id: ID | null) => (id ? docs[id]?.title : undefined);
   const snapEl = snapId ? elements.find((el) => el.id === snapId) : undefined;

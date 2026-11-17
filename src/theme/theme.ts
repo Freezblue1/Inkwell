@@ -4,14 +4,18 @@
  */
 import { alpha, createTheme, type Theme } from '@mui/material/styles';
 import type { Density } from '@/types/models';
-import { CANOPY, JUNGLE, LEAF_PATTERN } from './jungle';
+import { SCENES, type SceneId, type SceneSpec } from './scenes';
 
 declare module '@mui/material/styles' {
   interface Theme {
     inkwell: {
       density: Density;
-      /** True for the jungle look (vines, canopy, bamboo rail). */
-      jungle: boolean;
+      /** The illustrated theme in use (jungle, ocean…), or null for light/dark. */
+      scene: SceneId | null;
+      /** Navigation rail background for illustrated themes. */
+      rail: string | null;
+      /** Whiteboard canvas colour for illustrated themes. */
+      board: string | null;
       paper: { sepiaBg: string; sepiaText: string; pageBg: string; pageText: string; deskBg: string };
     };
   }
@@ -20,8 +24,8 @@ declare module '@mui/material/styles' {
   }
 }
 
-export function buildTheme(mode: 'light' | 'dark', density: Density, reducedMotion: boolean, variant: 'classic' | 'jungle' = 'classic'): Theme {
-  if (variant === 'jungle') return buildJungleTheme(density, reducedMotion);
+export function buildTheme(mode: 'light' | 'dark', density: Density, reducedMotion: boolean, scene: SceneId | null = null): Theme {
+  if (scene && SCENES[scene]) return buildSceneTheme(SCENES[scene], density, reducedMotion);
   const dark = mode === 'dark';
   const compact = density === 'compact';
 
@@ -59,7 +63,9 @@ export function buildTheme(mode: 'light' | 'dark', density: Density, reducedMoti
     },
     inkwell: {
       density,
-      jungle: false,
+      scene: null,
+      rail: null,
+      board: null,
       paper: {
         sepiaBg: '#f4ecd8',
         sepiaText: '#433422',
@@ -125,62 +131,59 @@ export function buildTheme(mode: 'light' | 'dark', density: Density, reducedMoti
 }
 
 /**
- * Jungle: a separate, fully themed look. Deep canopy greens, mango accents,
- * parchment pages, adventure-style headings. Vines and foliage are drawn by
- * <JungleDecor/> (features/shell) when this theme is active.
+ * Illustrated themes (Jungle, Ocean, Space, Cozy Library, Sakura): a full
+ * look built from a SceneSpec: palette, heading font, textured app bar,
+ * rail and background, themed dialogs and buttons. Animated decorations are
+ * drawn by <SceneDecor/> (features/shell/decor).
  */
-function buildJungleTheme(density: Density, reducedMotion: boolean): Theme {
-  const base = buildTheme('dark', density, reducedMotion);
-  const display = '"Trade Winds", "Roboto", cursive';
-  const heading = { fontFamily: display, fontWeight: 400, letterSpacing: 0.4 };
+function buildSceneTheme(s: SceneSpec, density: Density, reducedMotion: boolean): Theme {
+  const base = buildTheme(s.mode, density, reducedMotion);
+  const heading = { fontFamily: s.displayFont, fontWeight: s.headingWeight, letterSpacing: 0.3 };
+  const tint = (a: number) => `rgba(${s.tint}, ${a})`;
   return createTheme(base, {
     palette: {
-      primary: { main: JUNGLE.leaf, light: '#b4e6a8', dark: '#5fa452', contrastText: '#0b1f10' },
-      secondary: { main: JUNGLE.mango, light: '#ffd28a', dark: '#c98a2a', contrastText: '#2b1700' },
-      background: { default: JUNGLE.floor, paper: JUNGLE.paper },
-      text: { primary: JUNGLE.cream, secondary: JUNGLE.fern, disabled: '#6f8566' },
-      divider: 'rgba(170, 220, 150, 0.16)',
-      action: { hover: 'rgba(139, 209, 124, 0.09)', selected: 'rgba(139, 209, 124, 0.18)', focus: 'rgba(139, 209, 124, 0.22)' },
+      primary: s.primary,
+      secondary: s.secondary,
+      background: { default: s.bg, paper: s.paper },
+      text: s.text,
+      divider: s.divider,
+      action: { hover: tint(0.09), selected: tint(0.18), focus: tint(0.22) },
     },
     typography: { h1: heading, h2: heading, h3: heading, h4: heading, h5: heading },
     inkwell: {
       density,
-      jungle: true,
-      paper: { sepiaBg: '#efe2bf', sepiaText: '#3a2c14', pageBg: JUNGLE.parchment, pageText: JUNGLE.parchmentInk, deskBg: 'transparent' },
+      scene: s.id,
+      rail: s.rail,
+      board: s.board,
+      paper: { ...s.page, deskBg: 'transparent' },
     },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
-          body: { backgroundColor: JUNGLE.floor, backgroundImage: LEAF_PATTERN },
-          '*': { scrollbarColor: `${JUNGLE.moss} transparent` },
+          body: { background: s.body, backgroundAttachment: 'fixed' },
+          '*': { scrollbarColor: `${s.scrollbar} transparent` },
           '*::-webkit-scrollbar': { width: 10, height: 10 },
-          '*::-webkit-scrollbar-thumb': { background: JUNGLE.moss, borderRadius: 8, border: '2px solid transparent', backgroundClip: 'padding-box' },
-          '::selection': { background: 'rgba(255, 183, 77, 0.35)' },
+          '*::-webkit-scrollbar-thumb': { background: s.scrollbar, borderRadius: 8, border: '2px solid transparent', backgroundClip: 'padding-box' },
+          '::selection': { background: s.selection },
         },
       },
-      MuiAppBar: {
-        styleOverrides: { root: { backgroundImage: CANOPY, backgroundRepeat: 'repeat-x, no-repeat', borderBottomColor: 'rgba(139, 209, 124, 0.25)' } },
-      },
-      MuiPaper: {
-        styleOverrides: { root: { backgroundImage: 'linear-gradient(165deg, rgba(139,209,124,0.06), transparent 45%)' } },
-      },
-      MuiCard: { styleOverrides: { root: { borderRadius: 14, borderColor: 'rgba(139, 209, 124, 0.22)' } } },
-      MuiDialog: {
-        styleOverrides: { paper: { border: '1px solid rgba(139, 209, 124, 0.28)', backgroundColor: JUNGLE.paperRaised, backgroundImage: LEAF_PATTERN } },
-      },
+      MuiAppBar: { styleOverrides: { root: { background: s.appBar, borderBottomColor: tint(0.25) } } },
+      MuiPaper: { styleOverrides: { root: { backgroundImage: `linear-gradient(165deg, ${tint(0.06)}, transparent 45%)` } } },
+      MuiCard: { styleOverrides: { root: { borderRadius: 14, borderColor: tint(0.22) } } },
+      MuiDialog: { styleOverrides: { paper: { border: `1px solid ${tint(0.28)}`, background: s.dialog } } },
       MuiButton: {
         styleOverrides: {
           containedPrimary: {
-            backgroundImage: 'linear-gradient(180deg, #a3e093 0%, #6fb862 100%)',
-            color: '#0b1f10',
+            backgroundImage: `linear-gradient(180deg, ${s.button.from} 0%, ${s.button.to} 100%)`,
+            color: s.button.text,
             boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.18)',
-            '&:hover': { backgroundImage: 'linear-gradient(180deg, #b4e8a5 0%, #7cc56e 100%)' },
+            '&:hover': { backgroundImage: `linear-gradient(180deg, ${s.button.from} 0%, ${s.button.from} 100%)` },
           },
         },
       },
-      MuiTabs: { styleOverrides: { indicator: { backgroundColor: JUNGLE.mango, height: 3, borderRadius: 3 } } },
-      MuiTooltip: { styleOverrides: { tooltip: { backgroundColor: '#1d3d26', border: '1px solid rgba(139,209,124,0.3)' }, arrow: { color: '#1d3d26' } } },
-      MuiChip: { styleOverrides: { outlined: { borderColor: 'rgba(139, 209, 124, 0.35)' } } },
+      MuiTabs: { styleOverrides: { indicator: { backgroundColor: s.tabIndicator, height: 3, borderRadius: 3 } } },
+      MuiTooltip: { styleOverrides: { tooltip: { backgroundColor: s.tooltip, color: '#fff', border: `1px solid ${tint(0.3)}` }, arrow: { color: s.tooltip } } },
+      MuiChip: { styleOverrides: { outlined: { borderColor: tint(0.35) } } },
     },
   });
 }

@@ -8,13 +8,15 @@ import { HomePage } from '@/features/projects/HomePage';
 import { DialogHost } from '@/components/DialogHost';
 import { SnackbarHost } from '@/components/SnackbarHost';
 import { PwaManager } from '@/features/pwa/PwaManager';
-import { JungleDecor } from './JungleDecor';
+import { SceneDecor } from './decor/SceneDecor';
+import { sceneOf } from '@/theme/scenes';
 
 /** Loads settings and projects, then shows Home (or the open project's shell). */
 export function Bootstrap() {
   const [ready, setReady] = useState(false);
   const project = useStore((s) => s.project);
-  const jungleDecor = useStore((s) => s.settings.themeMode === 'jungle' && s.settings.jungleDecor !== false);
+  // Illustrated themes draw animated decorations (vines, bubbles, stars…) unless switched off.
+  const decorScene = useStore((s) => (s.settings.jungleDecor !== false ? sceneOf(s.settings.themeMode)?.id ?? null : null));
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +64,7 @@ export function Bootstrap() {
       <DialogHost />
       <SnackbarHost />
       <PwaManager />
-      {jungleDecor && <JungleDecor />}
+      {decorScene && <SceneDecor scene={decorScene} />}
     </>
   );
 }

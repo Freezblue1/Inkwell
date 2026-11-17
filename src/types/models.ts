@@ -463,8 +463,8 @@ export interface Backup {
   data: string;
 }
 
-/** "jungle" is a separate, fully themed look (canopy greens, hanging vines). */
-export type ThemeMode = 'light' | 'dark' | 'system' | 'jungle';
+/** Besides light/dark/system: illustrated themes (jungle, ocean, space, library, sakura); see theme/scenes.ts. */
+export type ThemeMode = 'light' | 'dark' | 'system' | 'jungle' | 'ocean' | 'space' | 'library' | 'sakura';
 export type Density = 'comfortable' | 'compact';
 export type PaperTheme = 'default' | 'sepia';
 export type FocusDim = 'off' | 'paragraph' | 'sentence';
@@ -517,6 +517,6 @@ export interface Settings {
   scratchpad: string;
   lastProjectId: ID | null;
   outlinerColumns: string[];
-  /** Jungle theme: show hanging vines and foliage. */
+  /** Illustrated themes: show animated decorations (vines, bubbles, stars…). Name kept for older settings. */
   jungleDecor: boolean;
 }

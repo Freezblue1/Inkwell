@@ -12,6 +12,7 @@ import { BIBLE_KIND_LABELS } from '@/lib/bible';
 import { flushAll } from '@/features/editor/autosave';
 import { newSceneAfterCurrent, snapshotActiveDoc } from './useGlobalShortcuts';
 import { REVISION_PASSES } from '@/features/editor/revisions/passes';
+import { SCENE_LIST } from '@/theme/scenes';
 import { resolveInProject } from '@/features/editor/revisions/RevisionMenu';
 
 interface Cmd {
@@ -81,7 +82,7 @@ export default function CommandPalette() {
       { id: 'theme-dark', kind: 'action', title: 'Theme: dark', run: () => s().updateSettings({ themeMode: 'dark' }) },
       { id: 'theme-light', kind: 'action', title: 'Theme: light', run: () => s().updateSettings({ themeMode: 'light' }) },
       { id: 'theme-system', kind: 'action', title: 'Theme: match system', run: () => s().updateSettings({ themeMode: 'system' }) },
-      { id: 'theme-jungle', kind: 'action', title: 'Theme: jungle', run: () => s().updateSettings({ themeMode: 'jungle' }) },
+      ...SCENE_LIST.map((sc): Cmd => ({ id: `theme-${sc.id}`, kind: 'action', title: `Theme: ${sc.name} — ${sc.tagline}`, run: () => s().updateSettings({ themeMode: sc.id }) })),
       { id: 'sepia', kind: 'action', title: 'Toggle sepia paper', run: () => s().updateEditorSettings({ paperTheme: s().settings.editor.paperTheme === 'sepia' ? 'default' : 'sepia' }) },
       { id: 'density', kind: 'action', title: 'Toggle compact density', run: () => s().updateSettings({ density: s().settings.density === 'compact' ? 'comfortable' : 'compact' }) },
       { id: 'shortcuts', kind: 'action', title: 'Keyboard shortcuts', hint: '?', run: () => s().openDialog('shortcuts') },

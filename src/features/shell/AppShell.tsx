@@ -47,7 +47,7 @@ export function AppShell() {
   })();
 
   return (
-    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: (t) => (t.inkwell.jungle ? 'transparent' : t.palette.background.default) }}>
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: (t) => (t.inkwell.scene ? 'transparent' : t.palette.background.default) }}>
       <a href="#main-content" className="visually-hidden" onFocus={(e) => e.currentTarget.classList.remove('visually-hidden')} onBlur={(e) => e.currentTarget.classList.add('visually-hidden')}>
         Skip to content
       </a>

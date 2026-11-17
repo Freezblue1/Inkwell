@@ -5,6 +5,7 @@ import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import VolumeUpIcon from '@mui/icons-material/VolumeUpOutlined';
 import VolumeOffIcon from '@mui/icons-material/VolumeOffOutlined';
 import { useStore } from '@/store';
+import { sceneOf } from '@/theme/scenes';
 import { buildTheme } from '@/theme/theme';
 import type { Ambient } from '@/types/models';
 import { EditorSurface } from '../EditorSurface';
@@ -34,7 +35,7 @@ export function FocusMode() {
   const docs = useStore((s) => s.docs);
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const themeMode = useStore((s) => s.settings.themeMode);
-  const isDark = themeMode === 'dark' || themeMode === 'jungle' || (themeMode === 'system' && prefersDark);
+  const isDark = themeMode === 'dark' || sceneOf(themeMode)?.mode === 'dark' || (themeMode === 'system' && prefersDark);
   const [controls, setControls] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
