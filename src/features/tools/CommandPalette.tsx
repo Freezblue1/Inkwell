@@ -13,6 +13,7 @@ import { flushAll } from '@/features/editor/autosave';
 import { newSceneAfterCurrent, snapshotActiveDoc } from './useGlobalShortcuts';
 import { REVISION_PASSES } from '@/features/editor/revisions/passes';
 import { SCENE_LIST } from '@/theme/scenes';
+import { openContinuity } from '@/features/plan/continuity/ContinuityView';
 import { resolveInProject } from '@/features/editor/revisions/RevisionMenu';
 
 interface Cmd {
@@ -54,6 +55,9 @@ export default function CommandPalette() {
       { id: 'bible', kind: 'action', title: 'Open story bible', run: () => s().setPlanTab('bible') },
       { id: 'relmap', kind: 'action', title: 'Open relationship map', run: () => s().setPlanTab('relationships') },
       { id: 'structure', kind: 'action', title: 'Generate outline from a story structure', run: () => s().setPlanTab('structure') },
+      { id: 'continuity', kind: 'action', title: 'Continuity checker (eye colour, name spellings, absences)', run: () => openContinuity('checks') },
+      { id: 'appearances', kind: 'action', title: 'Character appearances by chapter', run: () => openContinuity('appearances') },
+      { id: 'dialogue', kind: 'action', title: 'Dialogue view: one character’s lines', run: () => openContinuity('dialogue') },
       { id: 'new-scene', kind: 'action', title: 'New scene', hint: 'Ctrl+Alt+N', run: () => void newSceneAfterCurrent() },
       { id: 'new-char', kind: 'action', title: 'New character', run: () => void s().createBibleEntry('character').then((e) => s().openBibleEntry(e.id)) },
       { id: 'new-loc', kind: 'action', title: 'New location', run: () => void s().createBibleEntry('location').then((e) => s().openBibleEntry(e.id)) },

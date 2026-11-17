@@ -5,7 +5,7 @@ import { loadSettings, saveSettings } from '@/db/repos/settings';
 import { defaultSettings } from '@/lib/defaults';
 
 export type View = 'write' | 'plan' | 'research' | 'goals' | 'export' | 'history';
-export type PlanTab = 'corkboard' | 'whiteboard' | 'outliner' | 'plotgrid' | 'timeline' | 'bible' | 'relationships' | 'structure';
+export type PlanTab = 'corkboard' | 'whiteboard' | 'outliner' | 'plotgrid' | 'timeline' | 'bible' | 'relationships' | 'structure' | 'continuity';
 export type InspectorTab = 'synopsis' | 'metadata' | 'snapshots' | 'links' | 'comments';
 export type DialogKey =
   | 'palette'

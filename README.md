@@ -42,6 +42,18 @@ Inkwell opens on **Home**, a page with all your projects. Get back to it from an
 - **Actions:** New project, Import manuscript, Restore backup, and open or remove the sample novel. Settings are on the gear button. With no projects yet, Home shows the new-project form straight away.
 - App-icon shortcuts (New scene, Writing goals…) still open your last project directly.
 
+## Continuity checker and dialogue view
+
+Plan → **Continuity** (or Ctrl+K → "Continuity", "Appearances", "Dialogue"). It reads the whole manuscript and uses the Story Bible's characters.
+
+- **Checks:**
+  - **Described two different ways:** a character's eyes or hair given different colours in different scenes, or different from their Story Bible "Appearance" ("grey eyes" in the Bible, "blue eyes" in chapter 3). Inkwell links each description to the character named just before it.
+  - **Name spelled two ways:** words that look like a misspelt character name ("Tobias" for "Tobiah", "Macleod" for "MacLeod"), ignoring other characters' names and common words.
+  - **Missing for a while:** characters who vanish for several chapters (you choose how many), or regulars who are never seen again near the end.
+  - Every finding lists the passages with a button that opens the scene with the words selected. Dismiss anything that's intentional; dismissed findings are remembered per project.
+- **Appearances:** one row per character, one square per chapter, darker where they're named more often. Dashed red squares mark flagged absences; click a square to jump to that chapter.
+- **Dialogue:** pick a character to see only their lines, chapter by chapter, with measures of their voice: words per line and per sentence, questions, exclamations, contractions, the words they use more than anyone else and the phrases they repeat (click one to filter). Speakers come from dialogue tags ("…," Mara said); without a tag Inkwell guesses from who is named nearby, action beats and back-and-forth exchanges. Guessed lines are marked and can be hidden.
+
 ## Revision mode
 
 Tracked changes in colour-coded passes, like Scrivener's revision colours. Turn it on from the **Revision mode** button in the editor toolbar (pick First…Fifth revision), **Ctrl+Alt+R**, or Ctrl+K → "Revision mode".

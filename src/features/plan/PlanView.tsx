@@ -10,6 +10,7 @@ import { Timeline } from './timeline/Timeline';
 import { StoryBible } from './bible/StoryBible';
 import { RelationshipMap } from './relationships/RelationshipMap';
 import { StructureTemplates } from './structure/StructureTemplates';
+import ContinuityView from './continuity/ContinuityView';
 
 const TABS: { value: PlanTab; label: string }[] = [
   { value: 'corkboard', label: 'Corkboard' },
@@ -20,6 +21,7 @@ const TABS: { value: PlanTab; label: string }[] = [
   { value: 'bible', label: 'Story Bible' },
   { value: 'relationships', label: 'Relationships' },
   { value: 'structure', label: 'Structure' },
+  { value: 'continuity', label: 'Continuity' },
 ];
 
 /** Plan view: planning tools in tabs. */
@@ -44,6 +46,7 @@ export default function PlanView() {
           {tab === 'bible' && <StoryBible />}
           {tab === 'relationships' && <RelationshipMap />}
           {tab === 'structure' && <StructureTemplates />}
+          {tab === 'continuity' && <ContinuityView />}
         </ErrorBoundary>
       </Box>
     </Box>
