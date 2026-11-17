@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Inkwell — a local-first studio for writing novels." />
+    <meta name="theme-color" content="#283593" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1c23" media="(prefers-color-scheme: dark)" />
+    <!-- Installed app on iOS / iPadOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Inkwell" />
+    <title>Inkwell</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- UI font (Roboto) + selectable manuscript fonts -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Literata:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Tinos:ital,wght@0,400;0,700;1,400&family=Caveat:wght@400;600&family=Trade+Winds&display=swap"
+    />
+    <script>
+      // Apply the stored theme before React mounts to avoid a flash of the wrong theme.
+      try {
+        var m = localStorage.getItem('inkwell:themeMode') || 'system';
+        var dark = m === 'dark' || (m === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.style.background = m === 'jungle' ? '#0d1f14' : dark ? '#121318' : '#f7f7fb';
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <noscript>Inkwell needs JavaScript to run.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

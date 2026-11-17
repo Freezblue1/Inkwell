@@ -1,0 +1,117 @@
+{
+  "name": "inkwell",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Inkwell — a local-first novel writing studio (binder, corkboard, outliner, story bible, goals, compile & export).",
+  "author": "Inkwell",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "generate-pwa-assets": "pwa-assets-generator",
+    "desktop": "npm run build && electron .",
+    "exe": "npm run build && electron-builder --win portable --publish never",
+    "exe:installer": "npm run build && electron-builder --win nsis --publish never",
+    "exe:if-changed": "node scripts/rebuild-exe-if-changed.mjs"
+  },
+  "build": {
+    "appId": "app.inkwell.desktop",
+    "productName": "Inkwell",
+    "copyright": "Inkwell",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Inkwell.exe"
+    },
+    "nsis": {
+      "artifactName": "Inkwell-Setup-${version}.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "fileAssociations": [
+      {
+        "ext": "inkwell",
+        "name": "Inkwell project backup",
+        "description": "Inkwell project backup"
+      }
+    ]
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.8",
+    "@mui/material": "^6.4.8",
+    "@tanstack/react-virtual": "^3.13.4",
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/extension-bubble-menu": "^2.11.5",
+    "@tiptap/extension-character-count": "^2.11.5",
+    "@tiptap/extension-highlight": "^2.11.5",
+    "@tiptap/extension-link": "^2.11.5",
+    "@tiptap/extension-mention": "^2.11.5",
+    "@tiptap/extension-placeholder": "^2.11.5",
+    "@tiptap/extension-text-align": "^2.11.5",
+    "@tiptap/extension-typography": "^2.11.5",
+    "@tiptap/extension-underline": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
+    "@tiptap/suggestion": "^2.11.5",
+    "dexie": "^4.0.11",
+    "diff": "^5.2.0",
+    "docx": "^9.3.0",
+    "jspdf": "^2.5.2",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.13.0",
+    "marked": "^14.1.4",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/diff": "^5.2.3",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.17.24",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vite-pwa/assets-generator": "^0.2.6",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.14",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^2.1.9"
+  }
+}
