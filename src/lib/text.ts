@@ -13,6 +13,11 @@ export interface TextOptions {
   sceneBreak?: string;
 }
 
+/** True for text struck out by revision mode and not yet accepted or rejected. */
+export function isRevisionDeleted(node: JSONContent): boolean {
+  return !!node.marks?.some((m) => m.type === 'revisionDelete');
+}
+
 /** Converts TipTap JSON into plain text; blocks separated by blank lines. */
 export function docToText(json: JSONContent | null | undefined, opts: TextOptions = {}): string {
   if (!json) return '';
@@ -20,6 +25,8 @@ export function docToText(json: JSONContent | null | undefined, opts: TextOption
   const sceneBreak = opts.sceneBreak ?? '* * *';
 
   const inlineText = (node: JSONContent): string => {
+    // Tracked deletions (revision mode) aren't part of the text until rejected.
+    if (isRevisionDeleted(node)) return '';
     if (node.type === 'text') return node.text ?? '';
     if (node.type === 'hardBreak') return '\n';
     if (node.type === 'mention') return String(node.attrs?.label ?? '');

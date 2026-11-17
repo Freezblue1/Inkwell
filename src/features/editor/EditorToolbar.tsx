@@ -32,6 +32,7 @@ import { useLayoutMode } from '@/hooks/useLayoutMode';
 import { nearestAncestorOfType, childrenOf } from '@/lib/tree';
 import { addCommentToSelection, editLink, insertFootnote } from './editorActions';
 import { EditorSettingsForm } from './EditorSettingsForm';
+import { RevisionMenu } from './revisions/RevisionMenu';
 
 function TB({
   label,
@@ -211,6 +212,7 @@ export function EditorToolbar() {
 
       <Box sx={{ flex: 1, minWidth: 8 }} />
 
+      <RevisionMenu />
       <TB label={proofreading ? 'Proofreading on — highlights adverbs, fillers, typos' : 'Proofreading mode'} icon={<SpellcheckIcon fontSize="small" />} active={proofreading} onClick={() => s().setProofreading(!proofreading)} />
       <TB label="Scrivenings: edit the whole chapter as one text" icon={<ViewStreamIcon fontSize="small" />} active={!!scriveningsRootId} disabled={!activeDocId && !scriveningsRootId} onClick={toggleScrivenings} />
       {layout !== 'mobile' && <TB label="Split editor (Ctrl+\)" icon={<VerticalSplitIcon fontSize="small" />} active={splitEnabled} onClick={() => s().toggleSplit()} />}

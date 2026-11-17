@@ -35,12 +35,21 @@ npm run desktop          # build and run the desktop app without packaging
 
 ## Home
 
-Inkwell opens on **Home**, a page with all your projects. Get back to it from any project with the **Home** button (house icon) at the left of the top bar, **⋮ → Home**, **Ctrl+Shift+H**, Ctrl+K → "Home", or **Go to Home** in the project switcher. Leaving a project saves everything first.
+Inkwell opens on **Home**, a page with all your projects. Get back to it from any project with the **Home** button (house icon) at the left of the top bar, **⋮ → Home**, **Ctrl+Alt+H**, Ctrl+K → "Home", or **Go to Home** in the project switcher. Leaving a project saves everything first.
 
 - **Continue writing:** the project you opened last, with its word count, goal progress and a button to jump back in.
 - **All projects:** a card per project with a cover colour, author, word count, goal progress, series and when you last opened it. Search (with four or more projects) and sort by recently opened, title, newest or most words; the sort is remembered. Each card's ⋮ menu has Open, Duplicate, Download backup and Delete.
 - **Actions:** New project, Import manuscript, Restore backup, and open or remove the sample novel. Settings are on the gear button. With no projects yet, Home shows the new-project form straight away.
 - App-icon shortcuts (New scene, Writing goals…) still open your last project directly.
+
+## Revision mode
+
+Tracked changes in colour-coded passes, like Scrivener's revision colours. Turn it on from the **Revision mode** button in the editor toolbar (pick First…Fifth revision), **Ctrl+Alt+R**, or Ctrl+K → "Revision mode".
+
+- **While it's on:** new text appears in the pass colour (blue, red, green, purple, orange) with a dotted underline; deleted text stays visible, struck through in the pass colour. Deleting text you added in the same pass simply removes it. The status bar shows the active pass (click it to turn revision mode off). The pass is remembered per project.
+- **Review:** click into a change for an **Accept / Reject** bubble; select text to accept or reject every change inside it; **Ctrl+Alt+. / Ctrl+Alt+,** jump to the next / previous change. The menu also accepts or rejects everything in the document or the whole project, for every pass or one pass only (project-wide snapshots each changed document first).
+- **Show changes** off gives the final view: colours gone, deletions hidden.
+- Word counts, search and compiled exports already leave out deleted text. Paragraph joins and formatting changes aren't tracked.
 
 ## Importing a manuscript
 

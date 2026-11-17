@@ -3,6 +3,8 @@ import { Box, LinearProgress, Tooltip, Typography } from '@mui/material';
 import { useStore } from '@/store';
 import { aggregateWordCounts, manuscriptWordCount, nearestAncestorOfType } from '@/lib/tree';
 import { formatReadingTime } from '@/lib/wordCount';
+import { passInfo } from './revisions/passes';
+import { PassDot } from './revisions/RevisionMenu';
 
 function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
@@ -22,6 +24,7 @@ function Stat({ label, value, title }: { label: string; value: string; title?: s
 /** Live counts for the selection, document, chapter and manuscript. */
 export function StatsBar() {
   const live = useStore((s) => s.liveStats);
+  const revisionPass = useStore((s) => s.revisionPass);
   const docs = useStore((s) => s.docs);
   const activeDocId = useStore((s) => s.activeEditorDocId ?? s.activeDocId);
   const doc = activeDocId ? docs[activeDocId] : null;
@@ -77,6 +80,21 @@ export function StatsBar() {
       {chapterWords !== null && doc?.type !== 'chapter' && <Stat label="Chapter" value={chapterWords.toLocaleString()} />}
       <Stat label="Manuscript" value={manuscript.toLocaleString()} title={`${formatReadingTime(manuscript)} reading time`} />
       <Box sx={{ flex: 1 }} />
+      {revisionPass && (
+        <Tooltip title="Revision mode is on: new edits are tracked in this colour. Ctrl+Alt+R turns it off.">
+          <Box
+            component="button"
+            onClick={() => useStore.getState().setRevisionPass(null)}
+            aria-label={`Revision mode on: ${passInfo(revisionPass).name}. Turn off`}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, border: 0, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer', font: 'inherit', p: 0 }}
+          >
+            <PassDot n={revisionPass} />
+            <Typography variant="caption" sx={{ whiteSpace: 'nowrap', fontWeight: 500, color: 'text.primary' }}>
+              {passInfo(revisionPass).name}
+            </Typography>
+          </Box>
+        </Tooltip>
+      )}
       <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' }, whiteSpace: 'nowrap' }}>
         {formatReadingTime(docWords)} read
       </Typography>

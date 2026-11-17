@@ -11,6 +11,8 @@ import { GROUP_LABELS, groupOfDoc, ancestors } from '@/lib/tree';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
 import { flushAll } from '@/features/editor/autosave';
 import { newSceneAfterCurrent, snapshotActiveDoc } from './useGlobalShortcuts';
+import { REVISION_PASSES } from '@/features/editor/revisions/passes';
+import { resolveInProject } from '@/features/editor/revisions/RevisionMenu';
 
 interface Cmd {
   id: string;
@@ -59,6 +61,13 @@ export default function CommandPalette() {
       { id: 'find', kind: 'action', title: 'Find & replace', hint: 'Ctrl+H', run: () => (s().setView('write'), s().setFind({ open: true, replace: true })) },
       { id: 'search', kind: 'action', title: 'Search the whole project', hint: 'Ctrl+Shift+F', run: () => s().openDialog('search') },
       { id: 'snapshot', kind: 'action', title: 'Snapshot current document', hint: 'Ctrl+Shift+P', run: () => void snapshotActiveDoc() },
+      { id: 'revision-toggle', kind: 'action', title: 'Revision mode on/off (tracked changes)', hint: 'Ctrl+Alt+R', run: () => s().toggleRevisionMode() },
+      ...REVISION_PASSES.map((p): Cmd => ({ id: `revision-${p.n}`, kind: 'action', title: `Revision mode: ${p.name}`, run: () => s().setRevisionPass(p.n) })),
+      { id: 'revision-next', kind: 'action', title: 'Next tracked change', hint: 'Ctrl+Alt+.', run: () => s().activeEditor?.chain().focus().goToRevision(1).run() },
+      { id: 'revision-accept-doc', kind: 'action', title: 'Accept all tracked changes in this document', run: () => s().activeEditor?.chain().focus().resolveAllRevisions('accept').run() },
+      { id: 'revision-reject-doc', kind: 'action', title: 'Reject all tracked changes in this document', run: () => s().activeEditor?.chain().focus().resolveAllRevisions('reject').run() },
+      { id: 'revision-accept-project', kind: 'action', title: 'Accept all tracked changes in the project…', run: () => void resolveInProject('accept', null) },
+      { id: 'revision-view', kind: 'action', title: 'Show / hide tracked changes (markup ↔ final)', run: () => s().setRevisionView(s().revisionView === 'markup' ? 'final' : 'markup') },
       { id: 'proof', kind: 'action', title: 'Toggle proofreading mode', run: () => s().setProofreading(!s().proofreading) },
       { id: 'analysis', kind: 'action', title: 'Writing analysis', run: () => s().openDialog('analysis') },
       { id: 'names', kind: 'action', title: 'Name generator', run: () => s().openDialog('nameGen') },
@@ -68,7 +77,7 @@ export default function CommandPalette() {
       { id: 'import', kind: 'action', title: 'Import a manuscript (Word, Google Docs, Reedsy, Scrivener, Markdown, PDF)', run: () => s().openDialog('import') },
       { id: 'save', kind: 'action', title: 'Save now', hint: 'Ctrl+S', run: () => void flushAll().then(() => s().notify('All changes saved')) },
       { id: 'projects', kind: 'action', title: 'Switch project', run: () => s().openDialog('projects') },
-      { id: 'home', kind: 'action', title: 'Home (all projects)', hint: 'Ctrl+Shift+H', run: () => void s().goHome() },
+      { id: 'home', kind: 'action', title: 'Home (all projects)', hint: 'Ctrl+Alt+H', run: () => void s().goHome() },
       { id: 'theme-dark', kind: 'action', title: 'Theme: dark', run: () => s().updateSettings({ themeMode: 'dark' }) },
       { id: 'theme-light', kind: 'action', title: 'Theme: light', run: () => s().updateSettings({ themeMode: 'light' }) },
       { id: 'theme-system', kind: 'action', title: 'Theme: match system', run: () => s().updateSettings({ themeMode: 'system' }) },

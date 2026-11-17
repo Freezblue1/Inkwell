@@ -36,6 +36,7 @@ export function pmCountableText(doc: PMNode): string {
     if (!node.isTextblock) return true;
     let t = '';
     node.forEach((child) => {
+      if (child.marks.some((m) => m.type.name === 'revisionDelete')) return; // tracked deletion
       if (child.isText) t += child.text ?? '';
       else if (child.type.name === 'mention') t += String(child.attrs.label ?? '');
       else if (child.type.name === 'hardBreak') t += '\n';

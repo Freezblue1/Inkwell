@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react';
 import type { ID, InkDocument } from '@/types/models';
 import type { SliceCreator } from './types';
 import { sceneSequence } from '@/lib/tree';
+import { passInfo, setRevisionPass as setTrackingPass } from '@/features/editor/revisions/passes';
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 
@@ -31,6 +32,10 @@ export interface EditorSlice {
   find: { open: boolean; replace: boolean };
   footnoteEdit: { pos: number; text: string } | null;
   proofreading: boolean;
+  /** Revision mode: the pass new edits are tracked in (null = off). Per project. */
+  revisionPass: number | null;
+  /** Markup shows tracked changes in colour; final hides deletions and colours. */
+  revisionView: 'markup' | 'final';
 
   openDoc(id: ID | null, opts?: { target?: 'main' | 'split'; keepView?: boolean }): void;
   setScrivenings(rootId: ID | null): void;
@@ -45,11 +50,45 @@ export interface EditorSlice {
   setFind(patch: Partial<EditorSlice['find']>): void;
   setFootnoteEdit(v: EditorSlice['footnoteEdit']): void;
   setProofreading(on: boolean): void;
+  setRevisionPass(pass: number | null): void;
+  setRevisionView(view: 'markup' | 'final'): void;
+  /** Ctrl+Alt+R: off ↔ the last pass used in this project. */
+  toggleRevisionMode(): void;
   resetEditorForProject(docs: Record<ID, InkDocument>): void;
   handleDocsRemoved(ids: ID[]): void;
 }
 
 const lastDocKey = (pid: string) => `inkwell:lastDoc:${pid}`;
+const revisionKey = (pid: string) => `inkwell:revision:${pid}`;
+
+function loadRevisionPrefs(pid: string | undefined): { revisionPass: number | null; revisionView: 'markup' | 'final' } {
+  try {
+    const v = pid ? JSON.parse(localStorage.getItem(revisionKey(pid)) ?? 'null') : null;
+    if (v) return { revisionPass: typeof v.pass === 'number' ? v.pass : null, revisionView: v.view === 'final' ? 'final' : 'markup' };
+  } catch {
+    /* ignore */
+  }
+  return { revisionPass: null, revisionView: 'markup' };
+}
+
+function loadLastPass(pid: string | undefined): number {
+  try {
+    const v = pid ? JSON.parse(localStorage.getItem(revisionKey(pid)) ?? 'null') : null;
+    if (v && typeof v.last === 'number') return v.last;
+  } catch {
+    /* ignore */
+  }
+  return 1;
+}
+
+function saveRevisionPrefs(pid: string | undefined, pass: number | null, view: 'markup' | 'final') {
+  if (typeof document !== 'undefined') document.documentElement.dataset.revisions = view;
+  try {
+    if (pid) localStorage.setItem(revisionKey(pid), JSON.stringify({ pass, view, last: pass ?? loadLastPass(pid) }));
+  } catch {
+    /* ignore */
+  }
+}
 
 export const createEditorSlice: SliceCreator<EditorSlice> = (set, get) => ({
   activeDocId: null,
@@ -65,6 +104,8 @@ export const createEditorSlice: SliceCreator<EditorSlice> = (set, get) => ({
   find: { open: false, replace: false },
   footnoteEdit: null,
   proofreading: false,
+  revisionPass: null,
+  revisionView: 'markup',
 
   openDoc(id, opts = {}) {
     const doc = id ? get().docs[id] : null;
@@ -153,6 +194,25 @@ export const createEditorSlice: SliceCreator<EditorSlice> = (set, get) => ({
     set({ proofreading: on });
   },
 
+  setRevisionPass(pass) {
+    setTrackingPass(pass);
+    set({ revisionPass: pass });
+    saveRevisionPrefs(get().project?.id, pass, get().revisionView);
+  },
+
+  toggleRevisionMode() {
+    const s = get();
+    if (s.revisionPass) s.setRevisionPass(null);
+    else s.setRevisionPass(loadLastPass(s.project?.id));
+    const now = get().revisionPass;
+    get().notify(now ? `Revision mode on — ${passInfo(now).name}` : 'Revision mode off', 'info');
+  },
+
+  setRevisionView(view) {
+    set({ revisionView: view });
+    saveRevisionPrefs(get().project?.id, get().revisionPass, view);
+  },
+
   resetEditorForProject(docs) {
     const pid = get().project?.id;
     let last: string | null = null;
@@ -177,7 +237,10 @@ export const createEditorSlice: SliceCreator<EditorSlice> = (set, get) => ({
       activeEditor: null,
       activeEditorDocId: null,
       collapsed,
+      ...loadRevisionPrefs(pid),
     });
+    setTrackingPass(get().revisionPass);
+    if (typeof document !== 'undefined') document.documentElement.dataset.revisions = get().revisionView;
   },
 
   handleDocsRemoved(ids) {

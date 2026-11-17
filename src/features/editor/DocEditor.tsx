@@ -18,6 +18,7 @@ import { pmCountableText } from './extensions/textblocks';
 import { flushSave, scheduleSave, takeRecovery } from './autosave';
 import { addCommentToSelection, revealInspector } from './editorActions';
 import { EditorBubbleMenu } from './EditorBubbleMenu';
+import { RevisionBubble } from './revisions/RevisionBubble';
 import { ViewSkeleton } from '@/components/ViewSkeleton';
 
 export type EditorVariant = 'page' | 'scrivenings' | 'focus' | 'split';
@@ -263,7 +264,12 @@ function LoadedEditor({ docId, variant = 'page', autoFocus, dim = 'off', typewri
   return (
     <>
       <EditorContent editor={editor} />
-      <EditorBubbleMenu editor={editor} docId={docId} />
+      {/* Bubble menus get their own host: tippy moves their elements around, so on
+          unmount React must only remove this wrapper (removing them directly throws). */}
+      <div className="ink-bubbles">
+        <EditorBubbleMenu editor={editor} docId={docId} />
+        <RevisionBubble editor={editor} />
+      </div>
     </>
   );
 }

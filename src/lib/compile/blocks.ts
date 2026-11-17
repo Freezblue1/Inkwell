@@ -31,6 +31,8 @@ export function jsonToBlocks(json: JSONContent | null | undefined, notes: string
   const runsOf = (node: JSONContent): Run[] => {
     const out: Run[] = [];
     const walk = (n: JSONContent) => {
+      // Unresolved revision-mode deletions are left out of the compiled book.
+      if (n.marks?.some((m) => m.type === 'revisionDelete')) return;
       if (n.type === 'text') {
         const marks = new Set((n.marks ?? []).map((m) => m.type));
         out.push({

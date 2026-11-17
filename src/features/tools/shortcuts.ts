@@ -10,7 +10,9 @@ export const SHORTCUTS: ShortcutGroup[] = [
     items: [
       ['Mod+K', 'Command palette — jump to anything, run any action'],
       ['Mod+Shift+F', 'Search the whole project'],
-      ['Mod+Shift+H', 'Home — all your projects'],
+      ['Mod+Alt+H', 'Home — all your projects'],
+      ['Mod+Alt+R', 'Revision mode on / off (tracked changes)'],
+      ['Mod+Alt+.  /  Mod+Alt+,', 'Next / previous tracked change'],
       ['Mod+S', 'Save now (Inkwell also saves automatically)'],
       ['Mod+.', 'Toggle scratchpad'],
       ['?', 'This cheat sheet'],

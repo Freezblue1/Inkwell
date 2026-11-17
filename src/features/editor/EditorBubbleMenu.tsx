@@ -14,6 +14,9 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import type { ID } from '@/types/models';
 import { useStore } from '@/store';
 import { addCommentToSelection, editLink, selectedWord } from './editorActions';
+import { listChanges } from './revisions/resolve';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 
 /** Floating formatting menu shown over a text selection. */
 export function EditorBubbleMenu({ editor, docId }: { editor: Editor; docId: ID }) {
@@ -27,6 +30,10 @@ export function EditorBubbleMenu({ editor, docId }: { editor: Editor; docId: ID 
       strike: e.isActive('strike'),
       highlight: e.isActive('highlight'),
       link: e.isActive('link'),
+      revisions: (() => {
+        const { from, to, empty } = e.state.selection;
+        return !empty && listChanges(e.state.doc).some((c) => c.to > from && c.from < to);
+      })(),
     }),
   });
 
@@ -58,6 +65,13 @@ export function EditorBubbleMenu({ editor, docId }: { editor: Editor; docId: ID 
         {btn('Strikethrough (Ctrl+Shift+S)', <StrikethroughSIcon fontSize="small" />, () => editor.chain().focus().toggleStrike().run(), active?.strike)}
         {btn('Highlight (Ctrl+Shift+H)', <BorderColorIcon fontSize="small" />, () => editor.chain().focus().toggleHighlight().run(), active?.highlight)}
         {btn('Link', <LinkIcon fontSize="small" />, () => void editLink(editor), active?.link)}
+        {active?.revisions && (
+          <>
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+            {btn('Accept tracked changes in selection', <CheckIcon fontSize="small" />, () => editor.chain().focus().resolveRevisionAtSelection('accept').run())}
+            {btn('Reject tracked changes in selection', <CloseIcon fontSize="small" />, () => editor.chain().focus().resolveRevisionAtSelection('reject').run())}
+          </>
+        )}
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
         {btn('Comment (Ctrl+Alt+M)', <AddCommentIcon fontSize="small" />, () => void addCommentToSelection(editor, docId))}
         {btn('Dictionary & thesaurus', <MenuBookIcon fontSize="small" />, () => {

@@ -1,6 +1,7 @@
 /** Styled wrapper that applies manuscript typography and editor decorations. */
 import { styled, alpha } from '@mui/material/styles';
 import type { EditorSettings } from '@/types/models';
+import { REVISION_PASSES } from './revisions/passes';
 
 interface SurfaceProps {
   es: EditorSettings;
@@ -19,6 +20,7 @@ export const EditorSurface = styled('div', {
   const accent = theme.palette.secondary.main;
   const primary = theme.palette.primary.main;
   const glyph = JSON.stringify(es.sceneBreakGlyph || '* * *');
+  const darkPage = theme.palette.getContrastText(bg) === '#fff';
 
   return {
     color: fg,
@@ -94,6 +96,14 @@ export const EditorSurface = styled('div', {
       cursor: 'pointer',
       textIndent: 0,
     },
+    // Revision mode: added text in the pass colour (dotted underline so it isn't colour-only), deletions struck out.
+    '& .rev-ins': { textDecoration: 'underline dotted', textDecorationThickness: '1px', textUnderlineOffset: 3 },
+    '& .rev-del': { textDecoration: 'line-through', textDecorationThickness: '1.5px', opacity: 0.85 },
+    ...Object.fromEntries(
+      REVISION_PASSES.map((p) => [`& .rev-ins[data-pass="${p.n}"], & .rev-del[data-pass="${p.n}"]`, { color: darkPage ? p.dark : p.light }]),
+    ),
+    '[data-revisions="final"] & .rev-ins': { color: 'inherit', textDecoration: 'none' },
+    '[data-revisions="final"] & .rev-del': { display: 'none' },
     '& .search-match': { backgroundColor: alpha('#ffeb3b', 0.55), borderRadius: 2 },
     '& .search-match-current': { backgroundColor: '#ff9800', color: '#000' },
     '& .hl-adverb': { textDecoration: 'underline wavy #8e24aa', textUnderlineOffset: 3 },

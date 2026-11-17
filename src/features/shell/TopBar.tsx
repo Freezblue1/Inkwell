@@ -90,7 +90,7 @@ export function TopBar() {
             <MenuIcon />
           </IconButton>
         )}
-        <Tooltip title={`Home — all projects (${MOD}+Shift+H)`}>
+        <Tooltip title={`Home — all projects (${MOD}+Alt+H)`}>
           <IconButton aria-label="Home (all projects)" onClick={() => void useStore.getState().goHome()} edge={layout === 'desktop' || view !== 'write' ? 'start' : undefined}>
             <HomeIcon />
           </IconButton>

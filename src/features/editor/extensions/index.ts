@@ -16,6 +16,7 @@ import { FocusHighlight } from './FocusHighlight';
 import { AnalysisHighlight } from './AnalysisHighlight';
 import { PersistentUndo } from './PersistentUndo';
 import { createInkMention } from './InkMention';
+import { Revisions } from './Revisions';
 
 export interface EditorCallbacks {
   placeholder?: string;
@@ -46,6 +47,7 @@ export function buildExtensions(cb: EditorCallbacks): Extensions {
     Footnote.configure({ onEdit: cb.onFootnoteEdit }),
     Comment.configure({ onClick: cb.onCommentClick }),
     createInkMention(cb.onMentionClick),
+    Revisions,
     SearchHighlight,
     FocusHighlight,
     AnalysisHighlight,

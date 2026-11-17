@@ -52,7 +52,8 @@ export function useGlobalShortcuts() {
         void flushAll().then(() => useStore.getState().notify('All changes saved'));
         return;
       }
-      if (mod && e.shiftKey && !e.altKey && key === 'h') {
+      // Ctrl+Alt+H (Ctrl+Shift+H is the editor's Highlight).
+      if (mod && e.altKey && !e.shiftKey && key === 'h') {
         e.preventDefault();
         void s.goHome();
         return;
@@ -73,7 +74,12 @@ export function useGlobalShortcuts() {
         s.toggleSplit();
         return;
       }
-      if (mod && key === '.') {
+      if (mod && e.altKey && !e.shiftKey && key === 'r') {
+        e.preventDefault();
+        s.toggleRevisionMode();
+        return;
+      }
+      if (mod && !e.altKey && key === '.') {
         e.preventDefault();
         s.toggleDialog('scratchpad');
         return;
