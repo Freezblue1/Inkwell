@@ -197,6 +197,7 @@ export function defaultSettings(): Settings {
       focusDim: 'paragraph',
       ambient: 'paper',
       ambientSound: false,
+      ambientSoundKind: 'theme',
       sceneBreakGlyph: '⁂',
     },
     layout: {

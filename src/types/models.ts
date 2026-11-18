@@ -468,7 +468,10 @@ export type ThemeMode = 'light' | 'dark' | 'system' | 'jungle' | 'ocean' | 'spac
 export type Density = 'comfortable' | 'compact';
 export type PaperTheme = 'default' | 'sepia';
 export type FocusDim = 'off' | 'paragraph' | 'sentence';
-export type Ambient = 'none' | 'paper' | 'dusk' | 'forest' | 'ocean';
+/** Focus mode themes (see features/editor/focus/focusThemes.ts); 'scene' follows the illustrated app theme. */
+export type Ambient = 'none' | 'paper' | 'typewriter' | 'candlelight' | 'rain' | 'midnight' | 'snow' | 'forest' | 'ocean' | 'dusk' | 'terminal' | 'scene';
+/** 'theme' plays the focus theme's own sound. */
+export type AmbientSoundChoice = 'theme' | 'rain' | 'fire' | 'waves' | 'wind' | 'brown';
 
 export interface EditorSettings {
   fontFamily: string;
@@ -485,6 +488,7 @@ export interface EditorSettings {
   focusDim: FocusDim;
   ambient: Ambient;
   ambientSound: boolean;
+  ambientSoundKind: AmbientSoundChoice;
   sceneBreakGlyph: string;
 }
 
