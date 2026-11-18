@@ -24,4 +24,14 @@ contextBridge.exposeInMainWorld('inkwellDesktop', {
   ready() {
     ipcRenderer.send('renderer-ready');
   },
+  /** Self-updates of the portable exe (see electron/updater.cjs). */
+  updates: {
+    info: () => ipcRenderer.invoke('update-info'),
+    check: () => ipcRenderer.invoke('update-check'),
+    setAuto: (auto) => ipcRenderer.invoke('update-set-auto', auto),
+    restart: () => ipcRenderer.send('update-restart'),
+    onStatus(callback) {
+      ipcRenderer.on('update-status', (_event, info) => callback(info));
+    },
+  },
 });

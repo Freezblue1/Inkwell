@@ -21,7 +21,9 @@ npm run preview    # serve the production build
 Inkwell also ships as a standalone Windows program built with Electron.
 
 ```bash
-npm run exe              # → release/Inkwell.exe (single portable file, no install needed)
+npm run exe              # → release/Inkwell.exe (single portable file, no install needed; fast, uncompressed, ~45 s)
+npm run exe:small        # the same exe, compressed (~110 MB instead of ~330 MB, but a ~5 min build)
+npm run release          # publish a new version that running copies update to (see below)
 npm run exe:installer    # → release/Inkwell-Setup-<version>.exe (Start-menu install + .inkwell file association)
 npm run exe:if-changed   # rebuilds release/Inkwell.exe only if sources changed since the last build
 npm run desktop          # build and run the desktop app without packaging
@@ -31,6 +33,9 @@ npm run desktop          # build and run the desktop app without packaging
 - **Safety:** pending writing and whiteboards are saved before the window closes. Right-click shows spelling suggestions, links open in your browser, and exports ask where to save.
 - **Opening backups:** double-clicking a `.inkwell` file opens it with the installed app (installer build), or run `Inkwell.exe path\to\file.inkwell`.
 - **Automatic rebuilds:** a Claude Code Stop hook (`.claude/settings.json`) runs `npm run exe:if-changed` in the background after every Claude turn, so `release/Inkwell.exe` always matches the code. The log is in `release/build.log`. If a rebuild fails, close any running Inkwell (Windows locks a running exe) and run `npm run exe`.
+- **Fast rebuilds:** everyday builds skip compression, which was most of the 5-minute build time. Releases are compressed, so downloads stay small.
+- **Automatic updates:** the portable exe checks the latest [GitHub release](https://github.com/Freezblue1/Inkwell/releases) when it starts and every 6 hours. A newer `Inkwell.exe` downloads in the background and is checked against the size and SHA-256 GitHub reports. It then replaces the running exe when you close Inkwell, or straight away with **Restart now**. Turn checks off, or check by hand, in **Settings → App** or **Help → Check for updates…**. The exe must sit in a folder you can write to (not Program Files).
+- **Publishing a version:** commit your changes, then run `npm run release` (or `npm run release -- minor`, `-- 2.0.0`, `-- --notes "What's new"`). It runs the tests, bumps the version in `package.json`, builds the compressed exe, commits and tags `vX.Y.Z`, pushes, and creates the GitHub release with `Inkwell.exe` attached. Without `--notes`, the release notes list the commits since the last release.
 - **Unsigned:** the exe isn't code-signed, so Windows SmartScreen may warn on first launch (More info → Run anyway).
 
 ## Home

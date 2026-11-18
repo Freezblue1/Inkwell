@@ -15,6 +15,7 @@ import { importBundle, isProjectBundle } from '@/db/bundle';
 import { newSceneAfterCurrent } from '@/features/tools/useGlobalShortcuts';
 import { usePwa, type BeforeInstallPromptEvent } from './pwaStore';
 import { desktop, isDesktop } from '@/lib/desktop';
+import { UpdateReadySnackbar, useDesktopUpdates } from './DesktopUpdates';
 
 const UPDATE_CHECK_MS = 60 * 60 * 1000;
 const VIEWS: View[] = ['write', 'plan', 'research', 'goals', 'export', 'history'];
@@ -45,6 +46,7 @@ export function PwaManager() {
 
 /** Electron: save before the window closes, open .inkwell files passed in by Windows. */
 function DesktopManager() {
+  useDesktopUpdates();
   useEffect(() => {
     const bridge = desktop();
     if (!bridge) return;
@@ -53,7 +55,12 @@ function DesktopManager() {
     bridge.onOpenFile(({ name, text }) => void openBackupFile(new File([text], name, { type: 'application/json' })));
     bridge.ready();
   }, []);
-  return <AppShortcuts />;
+  return (
+    <>
+      <AppShortcuts />
+      <UpdateReadySnackbar />
+    </>
+  );
 }
 
 /** App-icon shortcuts (?action=… / ?view=…), shared by web and desktop. */

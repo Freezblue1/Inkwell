@@ -12,6 +12,7 @@ const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('ele
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
+const updater = require('./updater.cjs');
 
 const DIST = path.join(__dirname, '..', 'dist');
 const ORIGIN = 'app://inkwell';
@@ -150,6 +151,7 @@ function buildMenu() {
       label: 'Help',
       submenu: [
         { label: `Inkwell ${app.getVersion()}`, enabled: false },
+        { label: 'Check for updates…', click: () => void updater.check(true) },
         { label: 'Open data folder', click: () => void shell.openPath(app.getPath('userData')) },
       ],
     },
@@ -186,6 +188,7 @@ app.whenReady().then(() => {
   });
   buildMenu();
   createWindow();
+  updater.init(() => win);
   inkwellArgs(process.argv).forEach(sendFile);
 });
 

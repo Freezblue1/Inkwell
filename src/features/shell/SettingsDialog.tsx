@@ -20,6 +20,7 @@ import { SCENE_LIST, sceneOf } from '@/theme/scenes';
 import { getStorageInfo, requestPersistentStorage, type StorageInfo } from '@/db/db';
 import { EditorSettingsForm } from '@/features/editor/EditorSettingsForm';
 import { InstallAppCard } from '@/features/pwa/InstallAppCard';
+import { UpdateCard } from '@/features/pwa/DesktopUpdates';
 
 function formatBytes(n: number) {
   if (n > 1e9) return `${(n / 1e9).toFixed(1)} GB`;
@@ -126,6 +127,7 @@ export default function SettingsDialog() {
               App
             </Typography>
             <InstallAppCard />
+            <UpdateCard />
           </Box>
 
           <Box>
