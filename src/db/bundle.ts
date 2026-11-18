@@ -117,7 +117,10 @@ export function isProjectBundle(x: unknown): x is ProjectBundle {
  * Writes a bundle to the database as a NEW project (all ids are remapped so an
  * import never overwrites existing data). Returns the new project id.
  */
-export async function importBundle(bundle: ProjectBundle, opts: { titleSuffix?: string; keepIds?: boolean } = {}): Promise<ID> {
+export async function importBundle(
+  bundle: ProjectBundle,
+  opts: { titleSuffix?: string; keepIds?: boolean; /** Keep the bundle's updatedAt, and this lastOpenedAt (folder sync). */ keepTimes?: { lastOpenedAt: number } } = {},
+): Promise<ID> {
   if (!isProjectBundle(bundle)) throw new Error('This file is not an Inkwell project backup.');
   if (bundle.version > BUNDLE_VERSION) throw new Error('This backup was made by a newer version of Inkwell.');
 
@@ -151,8 +154,8 @@ export async function importBundle(bundle: ProjectBundle, opts: { titleSuffix?: 
     title: bundle.project.title + (opts.titleSuffix ?? ''),
     labels: bundle.project.labels.map((l) => ({ ...l, id: remap(l.id)! })),
     customFields: bundle.project.customFields.map((f) => ({ ...f, id: remap(f.id)! })),
-    updatedAt: now,
-    lastOpenedAt: now,
+    updatedAt: opts.keepTimes ? bundle.project.updatedAt : now,
+    lastOpenedAt: opts.keepTimes ? opts.keepTimes.lastOpenedAt : now,
   };
 
   const documents: InkDocument[] = bundle.documents.map((d) => ({
@@ -296,9 +299,10 @@ export async function importBundle(bundle: ProjectBundle, opts: { titleSuffix?: 
   return pid;
 }
 
-/** Deletes a project and every row that belongs to it. */
-export async function deleteProjectData(projectId: ID): Promise<void> {
-  const tables = [db.documents, db.contents, db.revisions, db.snapshots, db.bible, db.tags, db.plotThreads, db.comments, db.goals, db.sessions, db.exportProfiles, db.assets, db.backups, db.whiteboards];
+/** Deletes a project and every row that belongs to it (optionally keeping its snapshots and rolling backups). */
+export async function deleteProjectData(projectId: ID, opts: { keepHistory?: boolean } = {}): Promise<void> {
+  const history = [db.snapshots, db.backups];
+  const tables = [db.documents, db.contents, db.revisions, db.bible, db.tags, db.plotThreads, db.comments, db.goals, db.sessions, db.exportProfiles, db.assets, db.whiteboards, ...(opts.keepHistory ? [] : history)];
   await db.transaction('rw', [db.projects, ...tables], async () => {
     for (const t of tables) await t.where('projectId').equals(projectId).delete();
     await db.projects.delete(projectId);

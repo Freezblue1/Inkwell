@@ -10,6 +10,7 @@ import { SnackbarHost } from '@/components/SnackbarHost';
 import { PwaManager } from '@/features/pwa/PwaManager';
 import { SceneDecor } from './decor/SceneDecor';
 import { sceneOf } from '@/theme/scenes';
+import { initFolderSync, syncNow, useFolderSync } from '@/features/folderSync/folderSync';
 
 /** Loads settings and projects, then shows Home (or the open project's shell). */
 export function Bootstrap() {
@@ -39,10 +40,21 @@ export function Bootstrap() {
         useStore.getState().notify('Inkwell could not open its database. Is private browsing blocking storage?', 'error');
       }
       if (!cancelled) setReady(true);
+      void initFolderSync().catch((e) => console.warn('Folder sync failed to start', e));
     })();
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Coming back to Inkwell: pick up changes made elsewhere straight away.
+  useEffect(() => {
+    const onFocus = () => {
+      const st = useFolderSync.getState().status;
+      if (st === 'idle' || st === 'error') void syncNow();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   return (

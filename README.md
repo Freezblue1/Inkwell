@@ -38,6 +38,18 @@ npm run desktop          # build and run the desktop app without packaging
 - **Publishing a version:** commit your changes, then run `npm run release` (or `npm run release -- minor`, `-- 2.0.0`, `-- --notes "What's new"`). It runs the tests, bumps the version in `package.json`, builds the compressed exe, commits and tags `vX.Y.Z`, pushes, and creates the GitHub release with `Inkwell.exe` attached. Without `--notes`, the release notes list the commits since the last release.
 - **Unsigned:** the exe isn't code-signed, so Windows SmartScreen may warn on first launch (More info → Run anyway).
 
+## Projects folder (sync across PCs)
+
+**Settings → Projects folder → Choose folder…** mirrors every project to a folder you pick, such as OneDrive, Dropbox, Google Drive or a USB stick. It works in the desktop app and in Chrome or Edge (File System Access API). Firefox and Safari can't write to folders.
+
+- **Real files:** each project is saved as `Title.inkwell`, the same format as a backup. Inkwell writes a few seconds after you stop typing, and at least every 20 seconds while you type.
+- **Sync:** Inkwell checks the folder every few seconds (desktop) or every 10 seconds (browser), and again whenever you switch back to it. Point Inkwell on another PC, or in the browser, at the same folder: their projects appear, and edits travel both ways. The open project reloads when its file changes, but only if you have no unsaved changes here.
+- **Conflicts:** if a project changed both here and on another device since the last sync, this device's version keeps the file. The other version is added as “Title (other device, date)”, so nothing is lost. Before Inkwell replaces a project with the folder's version, it takes a rolling backup (History).
+- **Deleting:** a project deleted in Inkwell has its file moved to `Deleted projects/` and is recorded in `.inkwell-sync.json`, so other devices delete it too. Their copy of the file stays in `Deleted projects/`.
+- **Stays on each device:** the sample novel, snapshots, undo history and rolling backups.
+- **Matching:** files are matched to projects by the project id inside, not by file name. Renaming a project renames its file. **Stop using folder** leaves the files in place. If you choose the same folder again later, the most recently edited version of each project wins, and the older file is moved to `Deleted projects/`.
+- **Code:** `src/features/folderSync/engine.ts` (sync rules, tested in `engine.test.ts`), `adapters.ts` (desktop IPC and browser handles), `electron/folders.cjs` (file access limited to the chosen folder).
+
 ## Home
 
 Inkwell opens on **Home**, a page with all your projects. Get back to it from any project with the **Home** button (house icon) at the left of the top bar, **⋮ → Home**, **Ctrl+Alt+H**, Ctrl+K → "Home", or **Go to Home** in the project switcher. Leaving a project saves everything first.

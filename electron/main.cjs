@@ -13,6 +13,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const updater = require('./updater.cjs');
+const folders = require('./folders.cjs');
 
 const DIST = path.join(__dirname, '..', 'dist');
 const ORIGIN = 'app://inkwell';
@@ -189,6 +190,7 @@ app.whenReady().then(() => {
   buildMenu();
   createWindow();
   updater.init(() => win);
+  folders.init();
   inkwellArgs(process.argv).forEach(sendFile);
 });
 

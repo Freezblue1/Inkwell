@@ -21,6 +21,19 @@ export interface DesktopBridge {
   onOpenFile(cb: (file: { name: string; text: string }) => void): void;
   onAppClosing(cb: () => Promise<void> | void): void;
   ready(): void;
+  /** Missing in desktop builds older than 1.0.2. */
+  folders?: {
+    pick(current?: string | null): Promise<string | null>;
+    exists(dir: string): Promise<boolean>;
+    list(dir: string): Promise<{ name: string; mtime: number; size: number }[]>;
+    read(dir: string, name: string): Promise<string>;
+    write(dir: string, name: string, text: string): Promise<{ name: string; mtime: number; size: number }>;
+    remove(dir: string, name: string): Promise<void>;
+    moveToDeleted(dir: string, name: string): Promise<void>;
+    readMeta(dir: string): Promise<string | null>;
+    writeMeta(dir: string, text: string): Promise<void>;
+    open(dir: string): Promise<string>;
+  };
   /** Missing in desktop builds older than 1.0.1. */
   updates?: {
     info(): Promise<UpdateInfo>;

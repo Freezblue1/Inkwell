@@ -16,6 +16,7 @@ import { newSceneAfterCurrent } from '@/features/tools/useGlobalShortcuts';
 import { usePwa, type BeforeInstallPromptEvent } from './pwaStore';
 import { desktop, isDesktop } from '@/lib/desktop';
 import { UpdateReadySnackbar, useDesktopUpdates } from './DesktopUpdates';
+import { flushFolderSync } from '@/features/folderSync/folderSync';
 
 const UPDATE_CHECK_MS = 60 * 60 * 1000;
 const VIEWS: View[] = ['write', 'plan', 'research', 'goals', 'export', 'history'];
@@ -51,7 +52,10 @@ function DesktopManager() {
     const bridge = desktop();
     if (!bridge) return;
     usePwa.getState().setStandalone(true);
-    bridge.onAppClosing(() => flushAll());
+    bridge.onAppClosing(async () => {
+      await flushAll();
+      await flushFolderSync();
+    });
     bridge.onOpenFile(({ name, text }) => void openBackupFile(new File([text], name, { type: 'application/json' })));
     bridge.ready();
   }, []);

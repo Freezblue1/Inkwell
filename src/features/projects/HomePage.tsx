@@ -48,6 +48,7 @@ import { exportBundle, importBundle, isProjectBundle } from '@/db/bundle';
 import { loadProjectStats, type ProjectStats } from '@/db/projectStats';
 import { downloadBlob, fileSafe } from '@/lib/export/download';
 import { InstallAppCard } from '@/features/pwa/InstallAppCard';
+import { FolderSyncStatus } from '@/features/folderSync/FolderSyncCard';
 import type { ID, Project } from '@/types/models';
 import { NewProjectForm } from './NewProjectForm';
 
@@ -332,6 +333,9 @@ export function HomePage() {
 
         <Box sx={{ mb: 3 }}>
           <InstallAppCard compact />
+          <Box sx={{ mt: 0.5, ml: -0.5 }}>
+            <FolderSyncStatus />
+          </Box>
         </Box>
 
         {projects.length === 0 ? (
