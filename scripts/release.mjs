@@ -56,7 +56,9 @@ run('npm test');
 pkg.version = version;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 try {
-  run('npm run exe:small');
+  // Built in its own folder, so a running release/Inkwell.exe doesn't block publishing.
+  run('npm run build');
+  run('npx electron-builder --win portable --publish never -c.directories.output=release/publish');
 } catch (err) {
   pkg.version = JSON.parse(out('git', ['show', 'HEAD:package.json'])).version;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
@@ -75,5 +77,5 @@ execFileSync('git', ['commit', '-m', `Release ${tag}\n\nCo-Authored-By: Claude O
 execFileSync('git', ['tag', tag], { cwd: root, stdio: 'inherit' });
 run('git push');
 execFileSync('git', ['push', 'origin', tag], { cwd: root, stdio: 'inherit' });
-execFileSync('gh', ['release', 'create', tag, join(root, 'release', 'Inkwell.exe'), '--title', `Inkwell ${version}`, '--notes', notes], { cwd: root, stdio: 'inherit' });
+execFileSync('gh', ['release', 'create', tag, join(root, 'release', 'publish', 'Inkwell.exe'), '--title', `Inkwell ${version}`, '--notes', notes], { cwd: root, stdio: 'inherit' });
 console.log(`\nPublished Inkwell ${version}. Running copies will pick it up within a few hours, or at their next start.`);
