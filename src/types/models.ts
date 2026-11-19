@@ -381,6 +381,8 @@ export interface WbNote extends WbBase {
   h: number;
   text: string;
   fill: string;
+  /** Text colour; dark brown ink when missing. */
+  textColor?: string;
   /** Optional link to a binder document (a "scene card"). */
   docId: ID | null;
 }

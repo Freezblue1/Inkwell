@@ -13,7 +13,39 @@ export interface Rect {
   h: number;
 }
 
-export const NOTE_COLORS = ['#fff59d', '#ffcc80', '#f8bbd0', '#c5e1a5', '#b3e5fc', '#d1c4e9'];
+/** Sticky-note paper colours (bright, like real pads). */
+export const NOTE_COLORS = ['#ffe45c', '#ffb25b', '#ff94c2', '#a8e06f', '#7fcffc', '#c3a1f7'];
+/** Notes made before the brighter palette keep working: their pale colours map to the new ones. */
+const LEGACY_NOTE_COLORS: Record<string, string> = {
+  '#fff59d': '#ffe45c',
+  '#ffcc80': '#ffb25b',
+  '#f8bbd0': '#ff94c2',
+  '#c5e1a5': '#a8e06f',
+  '#b3e5fc': '#7fcffc',
+  '#d1c4e9': '#c3a1f7',
+};
+export const noteFill = (fill: string): string => LEGACY_NOTE_COLORS[fill.toLowerCase()] ?? fill;
+export const NOTE_TEXT_COLORS = ['#3e2723', '#212121', '#c62828', '#1565c0', '#2e7d32', '#6a1b9a', '#ffffff'];
+export const DEFAULT_NOTE_TEXT = '#3e2723';
+
+/** A small, stable tilt per note (degrees), so a board looks hand-placed. */
+export function noteTilt(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 300) / 100 - 1.5) * 0.9;
+}
+
+/** Darkens (amount < 0) or lightens (amount > 0) a #rrggbb colour. */
+export function shade(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.round(Math.min(255, Math.max(0, amount < 0 ? v * (1 + amount) : v + (255 - v) * amount)));
+  const r = ch(n >> 16);
+  const g = ch((n >> 8) & 255);
+  const b = ch(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
 export const INK_COLORS = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#6d4c41'];
 export const TEXT_LINE_HEIGHT = 1.3;
 export const NOTE_PADDING = 12;

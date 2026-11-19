@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
-import { arrowHead, FRAME_TITLE_H, NOTE_FONT_SIZE, NOTE_PADDING, pointsToPath, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import { arrowHead, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
@@ -51,20 +51,35 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
     case 'note': {
       const lines = hideText ? [] : wrapText(el.text, el.w - NOTE_PADDING * 2, NOTE_FONT_SIZE);
       const maxLines = Math.max(0, Math.floor((el.h - NOTE_PADDING * 2 - (el.docId ? 18 : 0)) / (NOTE_FONT_SIZE * TEXT_LINE_HEIGHT)));
+      const { x, y, w, h } = el;
+      const fill = noteFill(el.fill);
+      const textInk = el.textColor ?? DEFAULT_NOTE_TEXT;
+      // Upright while its text is being edited, so the text box lines up.
+      const tilt = hideText ? 0 : noteTilt(el.id);
+      const curl = Math.max(8, Math.min(20, w * 0.11, h * 0.14));
+      const band = Math.min(20, h * 0.15);
+      // Paper with its bottom-right corner lifting off the board.
+      const body = `M${x},${y} H${x + w} V${y + h - curl} Q${x + w - curl * 0.2},${y + h - curl * 0.2} ${x + w - curl},${y + h} H${x} Z`;
+      const flap = `M${x + w},${y + h - curl} Q${x + w - curl * 0.2},${y + h - curl * 0.2} ${x + w - curl},${y + h} Q${x + w - curl * 0.7},${y + h - curl * 0.5} ${x + w - curl * 0.62},${y + h - curl * 0.62} Q${x + w - curl * 0.5},${y + h - curl * 0.7} ${x + w},${y + h - curl} Z`;
       return (
-        <g>
-          <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={3} fill={el.fill} filter="url(#wb-shadow)" />
+        <g transform={tilt ? `rotate(${tilt} ${x + w / 2} ${y + h / 2})` : undefined}>
+          <path d={body} fill={fill} filter="url(#wb-note-shadow)" />
+          <path d={body} fill="url(#wb-note-sheen)" />
+          <rect x={x} y={y} width={w} height={band} fill="rgba(0,0,0,0.055)" />
+          <line x1={x} y1={y + band} x2={x + w} y2={y + band} stroke="rgba(0,0,0,0.05)" strokeWidth={1} />
+          <path d={flap} fill={shade(fill, -0.16)} />
+          <path d={body} fill="none" stroke={shade(fill, -0.3)} strokeOpacity={0.55} strokeWidth={0.8} />
           {el.docId && (
             <g>
-              <text x={el.x + NOTE_PADDING} y={el.y + NOTE_PADDING + 10} fontSize={11} fontFamily={UI_FONT} fontWeight={600} fill="#5d4037">
+              <text x={x + NOTE_PADDING} y={y + NOTE_PADDING + 10} fontSize={11} fontFamily={UI_FONT} fontWeight={600} fill={textInk} fillOpacity={0.75}>
                 SCENE{docTitle ? '' : ' (deleted)'}
               </text>
-              <text x={el.x + el.w - 22} y={el.y + 20} fontSize={15} fontFamily={UI_FONT} fill="#5d4037" style={{ cursor: 'pointer' }}>
+              <text x={x + w - 22} y={y + 20} fontSize={15} fontFamily={UI_FONT} fill={textInk} fillOpacity={0.75} style={{ cursor: 'pointer' }}>
                 ↗
               </text>
             </g>
           )}
-          <text fontFamily={WB_FONT} fontSize={NOTE_FONT_SIZE} fill="#3e2723">
+          <text fontFamily={WB_FONT} fontSize={NOTE_FONT_SIZE} fill={textInk}>
             {lines.slice(0, maxLines).map((line, i) => (
               <tspan key={i} x={el.x + NOTE_PADDING} y={el.y + NOTE_PADDING + (el.docId ? 18 : 0) + NOTE_FONT_SIZE + i * NOTE_FONT_SIZE * TEXT_LINE_HEIGHT}>
                 {i === maxLines - 1 && lines.length > maxLines ? `${line.slice(0, -1)}…` : line || ' '}

@@ -31,6 +31,8 @@ import {
   textHeight,
   topmostAt,
   unionBounds,
+  DEFAULT_NOTE_TEXT,
+  NOTE_COLORS,
   type Point,
 } from '@/lib/whiteboard';
 import { WbElementView, WB_FONT } from './WbElementView';
@@ -93,7 +95,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [vp, setVp] = useState<Viewport>(board.viewport);
   const [tool, setTool] = useState<WbTool>('select');
-  const [style, setStyleState] = useState<WbStyle>({ color: 'ink', strokeWidth: 4, noteColor: '#fff59d', filled: false });
+  const [style, setStyleState] = useState<WbStyle>({ color: 'ink', strokeWidth: 4, noteColor: NOTE_COLORS[0], noteText: DEFAULT_NOTE_TEXT, filled: false });
   const [selected, setSelected] = useState<ID[]>([]);
   const [draft, setDraft] = useState<WbElement | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -273,7 +275,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const createAt = (type: 'note' | 'text', p: Point) => {
     const el: WbElement =
       type === 'note'
-        ? { id: newId(), type: 'note', x: p.x - 90, y: p.y - 60, w: 180, h: 130, text: '', fill: style.noteColor, color: 'ink', strokeWidth: 1, docId: null }
+        ? { id: newId(), type: 'note', x: p.x - 90, y: p.y - 60, w: 180, h: 130, text: '', fill: style.noteColor, textColor: style.noteText, color: 'ink', strokeWidth: 1, docId: null }
         : { id: newId(), type: 'text', x: p.x, y: p.y - 14, w: 260, text: '', fontSize: 24, color: style.color, strokeWidth: 1 };
     commit([...elementsRef.current, el]);
     setSelected([el.id]);
@@ -282,6 +284,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   };
 
   const selectedEls = useMemo(() => elements.filter((e) => selected.includes(e.id)), [elements, selected]);
+  // Only sticky notes selected: the toolbar offers paper and text colours for them.
+  const noteSelection = useMemo(() => {
+    if (!selectedEls.length || !selectedEls.every((e) => e.type === 'note')) return null;
+    const first = selectedEls[0] as Extract<WbElement, { type: 'note' }>;
+    return { fill: first.fill, text: first.textColor ?? DEFAULT_NOTE_TEXT };
+  }, [selectedEls]);
   const single = selectedEls.length === 1 ? selectedEls[0] : null;
   const handleSize = 10 / vp.zoom;
 
@@ -701,12 +709,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         setStyle={(patch) => {
           setStyleState((s) => ({ ...s, ...patch }));
           // Restyle the selection too.
-          if (selectedEls.length && (patch.color || patch.strokeWidth || patch.noteColor)) {
+          if (selectedEls.length && (patch.color || patch.strokeWidth || patch.noteColor || patch.noteText)) {
             const ids = new Set(selected);
             commit(
               elements.map((el) => {
                 if (!ids.has(el.id)) return el;
-                if (el.type === 'note') return patch.noteColor ? { ...el, fill: patch.noteColor } : el;
+                if (el.type === 'note') return { ...el, ...(patch.noteColor ? { fill: patch.noteColor } : {}), ...(patch.noteText ? { textColor: patch.noteText } : {}) };
                 if (el.type === 'frame') return patch.color && patch.color !== 'ink' ? { ...el, fill: patch.color } : el;
                 if (el.type === 'image' || el.type === 'card') return el;
                 return { ...el, ...(patch.color ? { color: patch.color } : {}), ...(patch.strokeWidth ? { strokeWidth: patch.strokeWidth } : {}) };
@@ -723,6 +731,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         onRedo={redo}
         minimap={minimap}
         onToggleMinimap={toggleMinimap}
+        noteSelection={noteSelection}
         onPickImage={() => fileRef.current?.click()}
       />
       <input
@@ -760,6 +769,16 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           <filter id="wb-shadow" x="-10%" y="-10%" width="130%" height="140%">
             <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodOpacity="0.25" />
           </filter>
+          {/* Sticky notes: a soft contact shadow plus a deeper one where the paper lifts. */}
+          <filter id="wb-note-shadow" x="-15%" y="-15%" width="140%" height="150%">
+            <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#000" floodOpacity="0.28" />
+            <feDropShadow dx="2" dy="6" stdDeviation="5" floodColor="#000" floodOpacity="0.28" />
+          </filter>
+          <linearGradient id="wb-note-sheen" x1="0" y1="0" x2="0.35" y2="1">
+            <stop offset="0" stopColor="#fff" stopOpacity="0.28" />
+            <stop offset="0.45" stopColor="#fff" stopOpacity="0" />
+            <stop offset="1" stopColor="#000" stopOpacity="0.07" />
+          </linearGradient>
         </defs>
         {board.background !== 'plain' && <rect className="wb-bg" width="100%" height="100%" fill={`url(#wb-${board.background})`} />}
         <g className="wb-world" transform={`translate(${vp.x} ${vp.y}) scale(${vp.zoom})`}>
@@ -818,7 +837,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           key={editing.id}
           el={editing}
           vp={vp}
-          color={editing.type === 'note' ? '#3e2723' : editing.color === 'ink' ? ink : editing.color}
+          color={editing.type === 'note' ? editing.textColor ?? DEFAULT_NOTE_TEXT : editing.color === 'ink' ? ink : editing.color}
           onDone={finishEditing}
         />
       )}

@@ -3,7 +3,7 @@ import { useRef, type PointerEvent } from 'react';
 import { Paper } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { WbElement, Whiteboard } from '@/types/models';
-import { elementBounds, unionBounds, type Point } from '@/lib/whiteboard';
+import { elementBounds, noteFill, unionBounds, type Point } from '@/lib/whiteboard';
 
 const W = 200;
 const H = 136;
@@ -41,7 +41,7 @@ export function Minimap({ elements, vp, width, height, ink, onCenter }: Props) {
   };
 
   const fillOf = (el: WbElement): string => {
-    if (el.type === 'note') return el.fill;
+    if (el.type === 'note') return noteFill(el.fill);
     if (el.type === 'frame') return `${el.fill}55`;
     if (el.type === 'card') return '#ffffff';
     if (el.type === 'image') return '#9e9e9e';
