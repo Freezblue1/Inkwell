@@ -1,9 +1,16 @@
-import { memo } from 'react';
+import { createContext, memo, useContext } from 'react';
 import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
 import { arrowHead, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
+
+/**
+ * Prefix for this board's SVG <defs> ids (shadows, gradients). Every open board
+ * tab is mounted (hidden ones with display:none), so ids must be unique per
+ * board: a url(#id) that resolves into a hidden board draws nothing.
+ */
+export const WbDefsContext = createContext('wb');
 
 export const WB_FONT = '"Caveat", "Comic Sans MS", cursive';
 const UI_FONT = 'Roboto, "Segoe UI", sans-serif';
@@ -20,6 +27,7 @@ interface Props {
 
 /** Renders one whiteboard element as SVG. */
 export const WbElementView = memo(function WbElementView({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props) {
+  const defs = useContext(WbDefsContext);
   const color = el.color === 'ink' ? ink : el.color;
   switch (el.type) {
     case 'path':
@@ -63,8 +71,10 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
       const flap = `M${x + w},${y + h - curl} Q${x + w - curl * 0.2},${y + h - curl * 0.2} ${x + w - curl},${y + h} Q${x + w - curl * 0.7},${y + h - curl * 0.5} ${x + w - curl * 0.62},${y + h - curl * 0.62} Q${x + w - curl * 0.5},${y + h - curl * 0.7} ${x + w},${y + h - curl} Z`;
       return (
         <g transform={tilt ? `rotate(${tilt} ${x + w / 2} ${y + h / 2})` : undefined}>
-          <path d={body} fill={fill} filter="url(#wb-note-shadow)" />
-          <path d={body} fill="url(#wb-note-sheen)" />
+          {/* Shadow drawn separately, so the paper always shows even if a filter can't render. */}
+          <path d={body} fill="#000" filter={`url(#${defs}-note-shadow)`} />
+          <path d={body} fill={fill} />
+          <path d={body} fill={`url(#${defs}-note-sheen)`} />
           <rect x={x} y={y} width={w} height={band} fill="rgba(0,0,0,0.055)" />
           <line x1={x} y1={y + band} x2={x + w} y2={y + band} stroke="rgba(0,0,0,0.05)" strokeWidth={1} />
           <path d={flap} fill={shade(fill, -0.16)} />
@@ -128,6 +138,7 @@ function ImageView({ el }: { el: WbImage }) {
 const KIND_COLORS: Record<string, string> = { character: '#3949ab', location: '#00897b', item: '#ef6c00', lore: '#8e24aa' };
 
 function CardView({ el }: { el: WbCard }) {
+  const defs = useContext(WbDefsContext);
   const entry = useStore((s) => s.bible.find((b) => b.id === el.bibleId));
   const portrait = useAssetUrl(entry?.imageAssetId ?? null);
   const accent = entry?.color || (entry ? KIND_COLORS[entry.kind] : '#9e9e9e');
@@ -139,7 +150,7 @@ function CardView({ el }: { el: WbCard }) {
   const maxLines = Math.max(0, Math.floor((el.h - 58) / 17));
   return (
     <g>
-      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="#ffffff" stroke="rgba(0,0,0,0.12)" filter="url(#wb-shadow)" />
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="#ffffff" stroke="rgba(0,0,0,0.12)" filter={`url(#${defs}-shadow)`} />
       <rect x={el.x} y={el.y} width={6} height={el.h} rx={3} fill={accent} />
       <text x={el.x + pad + 6} y={el.y + pad + 9} fontSize={10.5} fontWeight={700} letterSpacing={0.8} fontFamily={UI_FONT} fill={accent}>
         {entry ? BIBLE_KIND_LABELS[entry.kind].singular.toUpperCase() : 'STORY BIBLE'}
