@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from 'react';
 import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
-import { arrowHead, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import { arrowHead, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
@@ -25,8 +25,19 @@ interface Props {
   paper?: string;
 }
 
-/** Renders one whiteboard element as SVG. */
-export const WbElementView = memo(function WbElementView({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props) {
+/** Renders one whiteboard element as SVG, turned by its rotation. */
+export const WbElementView = memo(function WbElementView(props: Props) {
+  const rot = rotationOf(props.el);
+  if (!rot) return <ElementShape {...props} />;
+  const b = localBounds(props.el);
+  return (
+    <g transform={`rotate(${rot} ${b.x + b.w / 2} ${b.y + b.h / 2})`}>
+      <ElementShape {...props} />
+    </g>
+  );
+});
+
+function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props) {
   const defs = useContext(WbDefsContext);
   const color = el.color === 'ink' ? ink : el.color;
   switch (el.type) {
@@ -62,8 +73,8 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
       const { x, y, w, h } = el;
       const fill = noteFill(el.fill);
       const textInk = el.textColor ?? DEFAULT_NOTE_TEXT;
-      // Upright while its text is being edited, so the text box lines up.
-      const tilt = hideText ? 0 : noteTilt(el.id);
+      // A small hand-placed tilt, unless the note was rotated on purpose (and none while its text is edited).
+      const tilt = hideText || el.rotation !== undefined ? 0 : noteTilt(el.id);
       const curl = Math.max(8, Math.min(20, w * 0.11, h * 0.14));
       const band = Math.min(20, h * 0.15);
       // Paper with its bottom-right corner lifting off the board.
@@ -119,7 +130,7 @@ export const WbElementView = memo(function WbElementView({ el, ink, hideText, do
     case 'frame':
       return <FrameView el={el} hideText={hideText} />;
   }
-});
+}
 
 function ImageView({ el }: { el: WbImage }) {
   const url = useAssetUrl(el.assetId);

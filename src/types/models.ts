@@ -342,6 +342,12 @@ interface WbBase {
   id: ID;
   color: WbColor;
   strokeWidth: number;
+  /**
+   * Clockwise rotation in degrees around the element's centre (shapes, notes,
+   * text, pictures, cards). Pen strokes and arrows store rotated points instead;
+   * frames stay upright.
+   */
+  rotation?: number;
 }
 
 export interface WbPath extends WbBase {

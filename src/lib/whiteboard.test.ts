@@ -10,6 +10,10 @@ import {
   elementsInFrame,
   hitTest,
   moveElement,
+  normalizeAngle,
+  rotateElement,
+  rotatePoint,
+  snapAngle,
   normalizeRect,
   paintOrder,
   pointsToPath,
@@ -137,5 +141,66 @@ describe('attached arrows, frames, pictures', () => {
     const r = resizeElement(img, { x: 400, y: 10 });
     expect(r.w).toBe(400);
     expect(r.h).toBe(200);
+  });
+});
+
+describe('rotation', () => {
+  const rect: WbShape = { id: 'r', type: 'rect', x: 0, y: 0, w: 100, h: 40, fill: 'none', color: 'ink', strokeWidth: 2 };
+
+  it('rotates points clockwise around a centre and normalises angles', () => {
+    const q = rotatePoint({ x: 10, y: 0 }, 90, { x: 0, y: 0 });
+    expect(q.x).toBeCloseTo(0);
+    expect(q.y).toBeCloseTo(10);
+    expect(normalizeAngle(270)).toBe(-90);
+    expect(normalizeAngle(-180)).toBe(180);
+    expect(snapAngle(47, true)).toBe(45);
+    expect(snapAngle(88, false)).toBe(90);
+    expect(snapAngle(80, false)).toBe(80);
+  });
+
+  it('grows the bounds and hit-tests in the rotated frame', () => {
+    const r90 = { ...rect, rotation: 90 };
+    const b = elementBounds(r90);
+    expect(b.w).toBeCloseTo(40);
+    expect(b.h).toBeCloseTo(100);
+    expect(b.x).toBeCloseTo(30);
+    expect(hitTest(r90, { x: 50, y: -25 }, 0)).toBe(true); // inside once turned upright
+    expect(hitTest(r90, { x: 5, y: 20 }, 0)).toBe(false); // inside the unrotated box only
+  });
+
+  it('turns a group around its centre: shapes gain rotation, strokes rotate their points, frames stay upright', () => {
+    const pivot = { x: 0, y: 0 };
+    const moved = rotateElement(rect, 90, pivot);
+    expect(moved.rotation).toBe(90);
+    expect(moved.x + moved.w / 2).toBeCloseTo(-20); // centre (50,20) → (-20,50)
+    expect(moved.y + moved.h / 2).toBeCloseTo(50);
+    const path = rotateElement({ id: 'p', type: 'path', points: [[10, 0]], color: 'ink', strokeWidth: 2 }, 90, pivot);
+    expect(path.points[0][0]).toBeCloseTo(0);
+    expect(path.points[0][1]).toBeCloseTo(10);
+    const frame = rotateElement<WbFrame>({ id: 'f', type: 'frame', x: 0, y: 0, w: 100, h: 40, title: 'F', fill: '#90caf9', color: 'ink', strokeWidth: 2 }, 90, pivot);
+    expect(frame.rotation).toBeUndefined();
+  });
+
+  it('resizes a rotated shape in its own frame, keeping its top-left corner in place', () => {
+    const r = { ...rect, rotation: 90 };
+    const corner = rotatePoint({ x: 0, y: 0 }, 90, { x: 50, y: 20 });
+    // Drag the (local) bottom-right corner to make it 200 × 60.
+    const target = rotatePoint({ x: 200, y: 60 }, 90, { x: 50, y: 20 });
+    const out = resizeElement(r, target);
+    expect(out.w).toBeCloseTo(200);
+    expect(out.h).toBeCloseTo(60);
+    const c2 = { x: out.x + out.w / 2, y: out.y + out.h / 2 };
+    const corner2 = rotatePoint({ x: out.x, y: out.y }, 90, c2);
+    expect(corner2.x).toBeCloseTo(corner.x);
+    expect(corner2.y).toBeCloseTo(corner.y);
+  });
+
+  it('attaches arrows to the rotated outline', () => {
+    const r90 = { ...rect, rotation: 90 }; // now 40 wide, 100 tall around (50,20)
+    const above = boundaryPoint(r90, { x: 50, y: -500 }, 0);
+    expect(above.x).toBeCloseTo(50);
+    expect(above.y).toBeCloseTo(-30); // half the (rotated) height above the centre
+    const right = boundaryPoint(r90, { x: 500, y: 20 }, 0);
+    expect(right.x).toBeCloseTo(70);
   });
 });

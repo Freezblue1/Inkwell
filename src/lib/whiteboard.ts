@@ -95,7 +95,72 @@ export function textHeight(text: string, width: number, fontSize: number): numbe
   return Math.max(1, lines) * fontSize * TEXT_LINE_HEIGHT;
 }
 
-export function elementBounds(el: WbElement): Rect {
+// ── Rotation ──────────────────────────────────────────────────────────────
+
+/** Elements that keep a `rotation` (the rest bake it into their points, or stay upright). */
+export function isBoxRotatable(el: WbElement): boolean {
+  return el.type !== 'path' && el.type !== 'arrow' && el.type !== 'frame';
+}
+
+/** Can the rotate handle turn this element on its own? */
+export function canRotate(el: WbElement): boolean {
+  return el.type !== 'arrow' && el.type !== 'frame';
+}
+
+export const rotationOf = (el: WbElement): number => (isBoxRotatable(el) ? el.rotation ?? 0 : 0);
+
+/** Angle in (-180, 180]. */
+export function normalizeAngle(deg: number): number {
+  const a = (((deg % 360) + 540) % 360) - 180;
+  return a === -180 ? 180 : a;
+}
+
+/** Rotates p clockwise by `deg` around c (SVG coordinates: y points down). */
+export function rotatePoint(p: Point, deg: number, c: Point): Point {
+  if (!deg) return p;
+  const a = (deg * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+}
+
+/** Snaps an angle to 15° steps (Shift), or onto a right angle when within 4°. */
+export function snapAngle(deg: number, fine: boolean): number {
+  if (fine) return normalizeAngle(Math.round(deg / 15) * 15);
+  const right = Math.round(deg / 90) * 90;
+  return normalizeAngle(Math.abs(deg - right) <= 4 ? right : deg);
+}
+
+/** Rotates an element by `deg` around `pivot`. */
+export function rotateElement<T extends WbElement>(el: T, deg: number, pivot: Point): T {
+  if (!deg) return el;
+  switch (el.type) {
+    case 'path':
+      return {
+        ...el,
+        points: el.points.map(([x, y]) => {
+          const q = rotatePoint({ x, y }, deg, pivot);
+          return [q.x, q.y] as [number, number];
+        }),
+      };
+    case 'arrow': {
+      const a = rotatePoint({ x: el.x1, y: el.y1 }, deg, pivot);
+      const b = rotatePoint({ x: el.x2, y: el.y2 }, deg, pivot);
+      return { ...el, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+    }
+    default: {
+      const c = centerOf(localBounds(el));
+      const n = rotatePoint(c, deg, pivot);
+      const moved = moveElement(el, n.x - c.x, n.y - c.y);
+      return el.type === 'frame' ? moved : { ...moved, rotation: normalizeAngle(rotationOf(el) + deg) };
+    }
+  }
+}
+
+/** The element's box before rotation. */
+export function localBounds(el: WbElement): Rect {
   switch (el.type) {
     case 'path': {
       const xs = el.points.map((p) => p[0]);
@@ -116,6 +181,25 @@ export function elementBounds(el: WbElement): Rect {
   }
 }
 
+/** Axis-aligned bounds, including rotation. */
+export function elementBounds(el: WbElement): Rect {
+  const b = localBounds(el);
+  const r = rotationOf(el);
+  if (!r) return b;
+  const c = centerOf(b);
+  const pts = [
+    { x: b.x, y: b.y },
+    { x: b.x + b.w, y: b.y },
+    { x: b.x + b.w, y: b.y + b.h },
+    { x: b.x, y: b.y + b.h },
+  ].map((p) => rotatePoint(p, r, c));
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
 /** Bounds covering several elements (null when empty). */
 export function unionBounds(els: WbElement[]): Rect | null {
   if (!els.length) return null;
@@ -134,7 +218,10 @@ export function distToSegment(p: Point, a: Point, b: Point): number {
 }
 
 /** Is point p on (or inside) the element? `tol` is in world units. */
-export function hitTest(el: WbElement, p: Point, tol = 6): boolean {
+export function hitTest(el: WbElement, p0: Point, tol = 6): boolean {
+  const rot = rotationOf(el);
+  // Test rotated elements in their own (unrotated) frame.
+  const p = rot ? rotatePoint(p0, -rot, centerOf(localBounds(el))) : p0;
   switch (el.type) {
     case 'path': {
       const r = tol + el.strokeWidth / 2;
@@ -164,7 +251,7 @@ export function hitTest(el: WbElement, p: Point, tol = 6): boolean {
       return ((p.x - cx) ** 2) / (rx * rx) + ((p.y - cy) ** 2) / (ry * ry) <= 1;
     }
     default: {
-      const b = elementBounds(el);
+      const b = localBounds(el);
       return p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
     }
   }
@@ -195,8 +282,17 @@ export function moveElement<T extends WbElement>(el: T, dx: number, dy: number):
   }
 }
 
-/** Resizes from the bottom-right corner so that it reaches point p. */
+/** Resizes from the bottom-right corner so that it reaches point p (for rotated elements, the corner in their own frame). */
 export function resizeElement<T extends WbElement>(el: T, p: Point, min = 16): T {
+  const rot = rotationOf(el);
+  if (rot) {
+    // Resize upright, then turn back so the top-left corner stays put on the board.
+    const c = centerOf(localBounds(el));
+    const upright = resizeElement({ ...el, rotation: 0 }, rotatePoint(p, -rot, c), min);
+    const nc = centerOf(localBounds(upright));
+    const wc = rotatePoint(nc, rot, c);
+    return { ...moveElement(upright, wc.x - nc.x, wc.y - nc.y), rotation: rot };
+  }
   switch (el.type) {
     case 'path': {
       const b = elementBounds(el);
@@ -300,9 +396,12 @@ export function attachableAt(els: WbElement[], p: Point, tol = 6, exclude?: ID):
 const centerOf = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
 /** Where a line from the element's centre towards `toward` leaves its outline (plus a small gap). */
-export function boundaryPoint(el: WbElement, toward: Point, gap = 6): Point {
-  const r = elementBounds(el);
+export function boundaryPoint(el: WbElement, towardWorld: Point, gap = 6): Point {
+  const r = localBounds(el);
   const c = centerOf(r);
+  const rot = rotationOf(el);
+  if (rot) return rotatePoint(boundaryPoint({ ...el, rotation: 0 }, rotatePoint(towardWorld, -rot, c), gap), rot, c);
+  const toward = towardWorld;
   const dx = toward.x - c.x;
   const dy = toward.y - c.y;
   if (!dx && !dy) return c;
