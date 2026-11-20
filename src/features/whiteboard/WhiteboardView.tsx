@@ -16,6 +16,7 @@ import { ViewSkeleton } from '@/components/ViewSkeleton';
 import { registerFlusher } from '@/features/editor/autosave';
 import { WhiteboardEditor, type WhiteboardHandle } from './WhiteboardEditor';
 import { WhiteboardTabs, type SaveState } from './WhiteboardTabs';
+import type { TabSlot } from '@/lib/boardTabs';
 import { exportWhiteboardPng } from './exportPng';
 import { buildTemplate, TEMPLATES, type TemplateId } from '@/lib/whiteboardTemplates';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
@@ -124,7 +125,7 @@ export function WhiteboardView() {
 
   /** Updates board metadata (name, order, open, background) and saves immediately. */
   const updateBoards = async (changed: Whiteboard[]) => {
-    const meta = (b: Whiteboard) => ({ name: b.name, order: b.order, open: b.open, background: b.background });
+    const meta = (b: Whiteboard) => ({ name: b.name, order: b.order, open: b.open, background: b.background, group: b.group ?? null });
     const map = new Map(changed.map((b) => [b.id, meta(b)]));
     // Only metadata changes here; keep the newest elements/viewport from state.
     setBoards((list) => list?.map((b) => (map.has(b.id) ? { ...b, ...map.get(b.id) } : b)) ?? list);
@@ -172,16 +173,33 @@ export function WhiteboardView() {
     notify(`Saved a copy as “${copy.name}”`);
   };
 
-  const move = async (id: ID, delta: -1 | 1) => {
-    const i = openBoards.findIndex((b) => b.id === id);
-    const j = i + delta;
-    if (i < 0 || j < 0 || j >= openBoards.length) return;
-    const a = openBoards[i];
-    const b = openBoards[j];
-    await updateBoards([
-      { ...a, order: b.order },
-      { ...b, order: a.order },
-    ]);
+  /** New tab order and groups from the tab strip (drag and drop, group menus). */
+  const arrangeTabs = async (slots: TabSlot[]) => {
+    const changed: Whiteboard[] = [];
+    slots.forEach((s, i) => {
+      const b = boardsRef.current?.find((x) => x.id === s.id);
+      if (!b) return;
+      const order = i;
+      const group = s.group ?? null;
+      if (b.order !== order || JSON.stringify(b.group ?? null) !== JSON.stringify(group)) changed.push({ ...b, order, group });
+    });
+    if (changed.length) await updateBoards(changed);
+  };
+
+  /** Closes several tabs (a whole group). */
+  const closeMany = async (ids: ID[]) => {
+    for (const id of ids) await flushBoard(id);
+    const rest = openBoards.filter((x) => !ids.includes(x.id));
+    if (!rest.length && projectId) {
+      const fresh = makeWhiteboard(projectId, `Board ${(boards?.length ?? 0) + 1}`, nextOrder());
+      await putWhiteboard(fresh);
+      setBoards((list) => (list ? [...list, fresh] : list));
+      rest.push(fresh);
+    }
+    await updateBoards(ids.map((id) => ({ ...boardsRef.current!.find((x) => x.id === id)!, open: false })));
+    ids.forEach((id) => handles.current.delete(id));
+    if (activeId && ids.includes(activeId)) rememberActive(rest[0].id);
+    notify(`Closed ${ids.length} ${ids.length === 1 ? 'board' : 'boards'} — reopen them from All boards`, 'info');
   };
 
   const close = async (id: ID) => {
@@ -318,7 +336,9 @@ export function WhiteboardView() {
         onCreate={() => void create()}
         onRename={(id) => void rename(id)}
         onDuplicate={(id) => void duplicate(id)}
-        onMove={(id, d) => void move(id, d)}
+        projectId={projectId!}
+        onArrange={(slots) => void arrangeTabs(slots)}
+        onCloseMany={(ids) => void closeMany(ids)}
         onClose={(id) => void close(id)}
         onReopen={(id) => void reopen(id)}
         onDelete={(id) => void remove(id)}

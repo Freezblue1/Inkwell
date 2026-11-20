@@ -384,13 +384,41 @@ export function isAttachable(el: WbElement): boolean {
   return el.type !== 'arrow' && el.type !== 'path' && el.type !== 'frame';
 }
 
-/** Topmost element an arrow end could attach to at p. */
-export function attachableAt(els: WbElement[], p: Point, tol = 6, exclude?: ID): WbElement | null {
+/** Is p within `band` of the element's outline (inside or outside)? Rotation-aware. */
+export function nearOutline(el: WbElement, p0: Point, band: number): boolean {
+  const b = localBounds(el);
+  const c = centerOf(b);
+  const p = rotatePoint(p0, -rotationOf(el), c);
+  if (el.type === 'ellipse') {
+    const rx = Math.max(1, b.w / 2);
+    const ry = Math.max(1, b.h / 2);
+    const r = Math.hypot((p.x - c.x) / rx, (p.y - c.y) / ry);
+    return Math.abs(r - 1) * Math.min(rx, ry) <= band;
+  }
+  const outX = Math.max(b.x - p.x, 0, p.x - (b.x + b.w));
+  const outY = Math.max(b.y - p.y, 0, p.y - (b.y + b.h));
+  const dist = outX || outY ? Math.hypot(outX, outY) : Math.min(p.x - b.x, b.x + b.w - p.x, p.y - b.y, b.y + b.h - p.y);
+  return dist <= band;
+}
+
+/**
+ * Topmost element an arrow end attaches to at p: only near its edge, so an
+ * arrow can still point at something inside a shape or frame without snapping.
+ */
+export function attachableAt(els: WbElement[], p: Point, band = 10, exclude?: ID): WbElement | null {
   for (let i = els.length - 1; i >= 0; i--) {
     const el = els[i];
-    if (el.id !== exclude && isAttachable(el) && hitTest(el, p, tol)) return el;
+    if (el.id !== exclude && isAttachable(el) && nearOutline(el, p, band)) return el;
   }
   return null;
+}
+
+/** Where to end the line of an arrow so it stops inside its head instead of poking out of the tip. */
+export function arrowLineEnd(x1: number, y1: number, x2: number, y2: number, head: number): Point {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  if (!len) return { x: x2, y: y2 };
+  const inset = Math.min(head * 0.75, len * 0.6);
+  return { x: x2 - ((x2 - x1) / len) * inset, y: y2 - ((y2 - y1) / len) * inset };
 }
 
 const centerOf = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });

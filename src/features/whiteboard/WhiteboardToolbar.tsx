@@ -67,7 +67,7 @@ export const TOOLS: {
   },
   {
     value: 'arrow',
-    label: 'Arrow — start or end on a note to attach it',
+    label: 'Arrow — start or end on the edge of a note or shape to attach it',
     key: 'A',
     icon: <ArrowRightAltIcon fontSize="small" />,
   },

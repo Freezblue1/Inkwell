@@ -437,6 +437,12 @@ export interface WbFrame extends WbBase {
 export type WbElement = WbPath | WbShape | WbArrow | WbNote | WbText | WbImage | WbCard | WbFrame;
 
 /** A freeform whiteboard (brainstorms, maps, mind maps). Several per project. */
+export interface WhiteboardGroup {
+  id: ID;
+  name: string;
+  color: string;
+}
+
 export interface Whiteboard {
   id: ID;
   projectId: ID;
@@ -447,6 +453,8 @@ export interface Whiteboard {
   order: number;
   /** Shown as a tab. Closed boards stay saved and can be reopened (undefined = open, for older data). */
   open?: boolean;
+  /** Tab group this board belongs to (its tabs sit together under a coloured label). */
+  group?: WhiteboardGroup | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

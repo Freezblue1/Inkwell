@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WbArrow, WbElement, WbFrame, WbImage, WbNote, WbPath, WbShape } from '@/types/models';
 import {
   arrowHead,
+  arrowLineEnd,
   attachableAt,
   boundaryPoint,
   containsRect,
@@ -111,8 +112,19 @@ describe('attached arrows, frames, pictures', () => {
     const p = boundaryPoint(ell, { x: 500, y: 50 }, 0);
     expect(p.x).toBeCloseTo(200);
     expect(p.y).toBeCloseTo(50);
-    expect(attachableAt([a, arrow], { x: 50, y: 50 })?.id).toBe('A');
-    expect(attachableAt([a], { x: 50, y: 50 }, 6, 'A')).toBeNull();
+    // Only near the edge: the middle of a note is free for pointing at things inside it.
+    expect(attachableAt([a, arrow], { x: 97, y: 50 })?.id).toBe('A');
+    expect(attachableAt([a, arrow], { x: 106, y: 50 })?.id).toBe('A');
+    expect(attachableAt([a, arrow], { x: 50, y: 50 })).toBeNull();
+    expect(attachableAt([a], { x: 97, y: 50 }, 6, 'A')).toBeNull();
+    expect(attachableAt([ell], { x: 100, y: 2 }, 6)?.id).toBe(ell.id);
+    expect(attachableAt([ell], { x: 100, y: 50 }, 6)).toBeNull();
+  });
+
+  it('stops the arrow line inside its head', () => {
+    const e = arrowLineEnd(0, 0, 100, 0, 20);
+    expect(e.x).toBeCloseTo(85);
+    expect(arrowLineEnd(0, 0, 10, 0, 20).x).toBeCloseTo(4);
   });
 
   it('copies elements with links re-pointed to the copies', () => {

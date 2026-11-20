@@ -83,7 +83,9 @@ type Drag =
   | { kind: 'place'; type: 'note' | 'text'; at: Point }
   | { kind: 'erase'; before: WbElement[]; erased: boolean }
   /** Turning the selection with the rotate handle: `base` is the starting angle shown to the user. */
-  | { kind: 'rotate'; pivot: Point; start: number; base: number; delta: number; before: WbElement[]; ids: Set<ID> };
+  | { kind: 'rotate'; pivot: Point; start: number; base: number; delta: number; before: WbElement[]; ids: Set<ID> }
+  /** Two fingers on a touchscreen: pinch to zoom, move together to pan. */
+  | { kind: 'pinch'; dist: number; mid: Point; vp: Viewport };
 
 const ROTATE_HANDLE_GAP = 28;
 const angleOf = (p: Point, c: Point) => (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
@@ -442,7 +444,37 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     return true;
   };
 
+  // Fingers currently on the canvas (touchscreens), in coordinates relative to the canvas.
+  const touches = useRef(new Map<number, Point>());
+  const touchPoint = (e: RPointerEvent<SVGSVGElement>): Point => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const pinchState = () => {
+    const [a, b] = [...touches.current.values()];
+    return { dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  };
+  /** A second finger landed: undo whatever the first finger started and switch to pinch-zoom. */
+  const startPinch = () => {
+    const d = drag.current;
+    if (d && (d.kind === 'move' || d.kind === 'resize' || d.kind === 'rotate' || d.kind === 'erase')) setElements(d.before);
+    if (d?.kind === 'draw') setDraft(null);
+    if (d?.kind === 'marquee') setMarquee(null);
+    setSnapId(null);
+    setRotLabel(null);
+    drag.current = { kind: 'pinch', ...pinchState(), vp };
+  };
+
   const onPointerDown = (e: RPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, touchPoint(e));
+      if (touches.current.size === 2) {
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+        startPinch();
+        return;
+      }
+      if (touches.current.size > 2) return;
+    }
     if (editingId) return;
     wrapRef.current?.focus({ preventScroll: true });
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -543,7 +575,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         return;
       case 'arrow': {
         // Starting on a note, shape, card or picture attaches the arrow to it.
-        const src = attachableAt(painted, p, tol);
+        const src = attachableAt(painted, p, 10 / vp.zoom);
         setDraft({
           id: newId(),
           type: 'arrow',
@@ -588,7 +620,18 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   };
 
   const onPointerMove = (e: RPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) touches.current.set(e.pointerId, touchPoint(e));
     const d = drag.current;
+    if (d?.kind === 'pinch') {
+      if (touches.current.size < 2) return;
+      const now = pinchState();
+      const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, d.vp.zoom * (now.dist / d.dist)));
+      // Keep the board point that was under the fingers' midpoint under it, wherever the fingers go.
+      const wx = (d.mid.x - d.vp.x) / d.vp.zoom;
+      const wy = (d.mid.y - d.vp.y) / d.vp.zoom;
+      setVp({ zoom, x: now.mid.x - wx * zoom, y: now.mid.y - wy * zoom });
+      return;
+    }
     const svg = svgRef.current;
     if (svg && !d) {
       // Cursor feedback over handles.
@@ -625,7 +668,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         if (target?.type === 'arrow') {
           // Dragging an arrow end: it follows the pointer and can snap onto something.
           const other = d.end === 'end' ? target.from : target.to;
-          const snap = attachableAt(painted, p, 6 / vp.zoom, other ?? undefined);
+          const snap = attachableAt(painted, p, 10 / vp.zoom, other ?? undefined);
           d.snap = snap?.id ?? null;
           setSnapId(d.snap);
           setElements(d.before.map((el) => (el.id !== d.id || el.type !== 'arrow' ? el : d.end === 'start' ? { ...el, x1: p.x, y1: p.y, from: null } : { ...el, x2: p.x, y2: p.y, to: null })));
@@ -657,7 +700,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
             return { ...cur, points: [...cur.points, [p.x, p.y]] };
           }
           if (cur.type === 'arrow') {
-            const snap = attachableAt(painted, p, 6 / vp.zoom, cur.from ?? undefined);
+            const snap = attachableAt(painted, p, 10 / vp.zoom, cur.from ?? undefined);
             setSnapId(snap?.id ?? null);
             return { ...cur, x2: p.x, y2: p.y, to: snap?.id ?? null };
           }
@@ -683,7 +726,15 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e?: RPointerEvent<SVGSVGElement>) => {
+    if (e?.pointerType === 'touch') {
+      touches.current.delete(e.pointerId);
+      if (drag.current?.kind === 'pinch') {
+        // The gesture ends when the fingers lift; a finger left behind doesn't start anything.
+        if (touches.current.size === 0) drag.current = null;
+        return;
+      }
+    }
     const d = drag.current;
     drag.current = null;
     setSnapId(null);

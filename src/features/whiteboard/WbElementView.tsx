@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from 'react';
 import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
-import { arrowHead, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import { arrowHead, arrowLineEnd, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
@@ -52,10 +52,13 @@ function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props)
       const mx = (el.x1 + el.x2) / 2;
       const my = (el.y1 + el.y2) / 2;
       const lw = label.length * 7.2 + 14;
+      const head = 10 + el.strokeWidth * 2;
+      // The line ends inside the head, so a thick stroke doesn't stick out past the point.
+      const end = arrowLineEnd(el.x1, el.y1, el.x2, el.y2, head);
       return (
         <g>
-          <line x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2} stroke={color} strokeWidth={el.strokeWidth} strokeLinecap="round" />
-          <polygon points={arrowHead(el.x1, el.y1, el.x2, el.y2, 10 + el.strokeWidth * 2)} fill={color} />
+          <line x1={el.x1} y1={el.y1} x2={end.x} y2={end.y} stroke={color} strokeWidth={el.strokeWidth} strokeLinecap="round" />
+          <polygon points={arrowHead(el.x1, el.y1, el.x2, el.y2, head)} fill={color} strokeLinejoin="round" stroke={color} strokeWidth={Math.min(2, el.strokeWidth / 2)} />
           {label && (
             <g>
               <rect x={mx - lw / 2} y={my - 11} width={lw} height={22} rx={11} fill={paper} stroke={color} strokeWidth={1} />

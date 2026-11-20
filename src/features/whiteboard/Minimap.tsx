@@ -52,7 +52,7 @@ export function Minimap({ elements, vp, width, height, ink, onCenter }: Props) {
   return (
     <Paper
       elevation={4}
-      sx={{ position: 'absolute', right: 12, bottom: 12, zIndex: 2, width: W, height: H, overflow: 'hidden', borderRadius: 2, opacity: 0.94, display: { xs: 'none', sm: 'block' } }}
+      sx={{ position: 'absolute', right: 12, bottom: 12, zIndex: 1200, width: W, height: H, overflow: 'hidden', borderRadius: 2, opacity: 0.94, display: { xs: 'none', sm: 'block' } }}
       aria-label="Minimap: click to move the view"
     >
       <svg
