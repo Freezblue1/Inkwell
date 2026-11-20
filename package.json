@@ -1,7 +1,7 @@
 {
   "name": "inkwell",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Inkwell — a local-first novel writing studio (binder, corkboard, outliner, story bible, goals, compile & export).",
   "author": "Inkwell",
   "type": "module",
