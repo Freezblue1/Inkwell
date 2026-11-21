@@ -47,6 +47,12 @@ import {
   DEFAULT_NOTE_TEXT,
   NOTE_COLORS,
   canRotate,
+  alignSnap,
+  selectedGroups,
+  snapToGrid,
+  withGroups,
+  type Guide,
+  type Rect,
   fillFor,
   fillModeOf,
   textBoxWidth,
@@ -72,6 +78,9 @@ type Drag =
       moved: boolean;
       ids: Set<ID>;
       detach: Set<ID>;
+      /** Bounds of what's moving, and of everything else (for alignment guides). */
+      box: Rect | null;
+      others: Rect[];
     }
   | {
       kind: 'resize';
@@ -129,6 +138,28 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     setElementsRaw((prev) => routeConnectors(typeof next === 'function' ? next(prev) : next));
   }, []);
   const [snapId, setSnapId] = useState<ID | null>(null);
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const [snapGrid, setSnapGrid] = useState(() => {
+    try {
+      return localStorage.getItem('inkwell:wb:snap') === 'on';
+    } catch {
+      return false;
+    }
+  });
+  const toggleSnap = () =>
+    setSnapGrid((on) => {
+      try {
+        localStorage.setItem('inkwell:wb:snap', on ? 'off' : 'on');
+      } catch {
+        /* ignore */
+      }
+      return !on;
+    });
+  const gridSize = board.background === 'grid' ? 32 : 24;
+  /** Grid-snaps a point when snapping is on (Alt held = free). */
+  const snapPt = (p: Point, alt = false): Point => (snapGrid && !alt ? { x: snapToGrid(p.x, gridSize), y: snapToGrid(p.y, gridSize) } : p);
+  /** Bounds of elements (other than `skip`) that things can line up with. */
+  const guideTargets = (skip: Set<ID>, els: WbElement[] = elementsRef.current): Rect[] => els.filter((el) => !skip.has(el.id) && el.type !== 'arrow').map(elementBounds);
   const [minimap, setMinimap] = useState(() => {
     try {
       return localStorage.getItem('inkwell:wb:minimap') !== 'off';
@@ -358,7 +389,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         ? {
             id: newId(),
             type: 'note',
-            x: p.x - 90,
+            x: snapGrid ? snapToGrid(p.x - 90, gridSize) : p.x - 90,
             y: p.y - 60,
             w: 180,
             h: 130,
@@ -372,8 +403,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         : {
             id: newId(),
             type: 'text',
-            x: p.x,
-            y: p.y - 14,
+            x: snapGrid ? snapToGrid(p.x, gridSize) : p.x,
+            y: snapGrid ? snapToGrid(p.y - 14, gridSize) : p.y - 14,
             w: 260,
             text: '',
             fontSize: 24,
@@ -399,7 +430,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
 
   /** Which resize handle (if any) of the single selected element is under p. */
   const handleAt = (p: Point): 'end' | 'start' | null => {
-    if (!single) return null;
+    if (!single || single.locked) return null;
     if (single.type === 'arrow') {
       if (Math.hypot(p.x - single.x2, p.y - single.y2) <= handleSize) return 'end';
       if (Math.hypot(p.x - single.x1, p.y - single.y1) <= handleSize) return 'start';
@@ -416,13 +447,13 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     if (editingId || !selectedEls.length) return null;
     const gap = ROTATE_HANDLE_GAP / vp.zoom;
     if (single) {
-      if (!canRotate(single)) return null;
+      if (!canRotate(single) || single.locked) return null;
       const b = localBounds(single);
       const c = centerOfRect(b);
       const rot = rotationOf(single);
       return { at: rotatePoint({ x: c.x, y: b.y - gap }, rot, c), from: rotatePoint({ x: c.x, y: b.y - 4 / vp.zoom }, rot, c), pivot: c, base: rot };
     }
-    if (!selectedEls.some(canRotate)) return null;
+    if (!selectedEls.some((el) => canRotate(el) && !el.locked)) return null;
     const ub = unionBounds(selectedEls)!;
     const c = centerOfRect(ub);
     return { at: { x: c.x, y: ub.y - gap }, from: { x: c.x, y: ub.y - 4 / vp.zoom }, pivot: c, base: 0 };
@@ -439,8 +470,32 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     commit(elements.map((el) => (ids.has(el.id) ? rotateElement(el, delta, rotateHandle.pivot) : el)));
   };
 
+  const selGroups = selectedGroups(elements, selected);
+  const oneGroup = selGroups.length === 1 && selectedEls.length > 1 && selectedEls.every((el) => el.groupId === selGroups[0]);
+
+  /** Ctrl+G: the selection becomes one group (moves, turns and is selected together). */
+  const groupSelection = () => {
+    if (selectedEls.length < 2) return;
+    const gid = newId();
+    const ids = new Set(selected);
+    commit(elements.map((el) => (ids.has(el.id) ? { ...el, groupId: gid } : el)));
+  };
+  /** Ctrl+Shift+G: break up the selected groups. */
+  const ungroupSelection = () => {
+    const groups = new Set(selectedEls.map((el) => el.groupId).filter(Boolean));
+    if (!groups.size) return;
+    commit(elements.map((el) => (el.groupId && groups.has(el.groupId) ? { ...el, groupId: undefined } : el)));
+  };
+  /** Ctrl+Shift+L: lock the selection, or unlock it if it's all locked. */
+  const toggleLock = () => {
+    if (!selectedEls.length) return;
+    const lock = !selectedEls.every((el) => el.locked);
+    const ids = new Set(selected);
+    commit(elements.map((el) => (ids.has(el.id) ? { ...el, locked: lock || undefined } : el)));
+  };
+
   const eraseAt = (p: Point): boolean => {
-    const hit = topmostAt(paintOrder(elementsRef.current), p, 8 / vp.zoom);
+    const hit = topmostAt(paintOrder(elementsRef.current.filter((el) => !el.locked)), p, 8 / vp.zoom);
     if (!hit) return false;
     setElements((els) => els.filter((e) => e.id !== hit.id));
     return true;
@@ -530,14 +585,20 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
             openBible(hit.bibleId);
             return;
           }
-          const sel = selected.includes(hit.id) ? selected : e.shiftKey ? [...selected, hit.id] : [hit.id];
-          if (!selected.includes(hit.id)) setSelected(sel);
+          // Clicking part of a group selects the whole group; Ctrl/Cmd-click picks just that item.
+          const pickOne = e.ctrlKey || e.metaKey;
+          const unit = pickOne ? [hit.id] : withGroups(elements, [hit.id]);
+          const sel = pickOne ? [hit.id] : selected.includes(hit.id) ? selected : e.shiftKey ? [...new Set([...selected, ...unit])] : unit;
+          if (sel.join() !== selected.join()) setSelected(sel);
+          const ms = moveSet(sel);
           drag.current = {
             kind: 'move',
             start: p,
             before: elements,
             moved: false,
-            ...moveSet(sel),
+            ...ms,
+            box: unionBounds(elements.filter((el) => ms.ids.has(el.id))),
+            others: guideTargets(ms.ids),
           };
         } else {
           if (!e.shiftKey) setSelected([]);
@@ -561,20 +622,22 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         drag.current = { kind: 'draw', start: p };
         return;
       case 'rect':
-      case 'ellipse':
+      case 'ellipse': {
+        const g = snapPt(p, e.altKey);
         setDraft({
           id: newId(),
           type: tool,
-          x: p.x,
-          y: p.y,
+          x: g.x,
+          y: g.y,
           w: 0,
           h: 0,
           fill: shapeFill(style.color),
           color: style.color,
           strokeWidth: style.strokeWidth,
         });
-        drag.current = { kind: 'draw', start: p };
+        drag.current = { kind: 'draw', start: g };
         return;
+      }
       case 'arrow': {
         // Starting on a note, shape, card or picture attaches the arrow to it.
         const src = attachableAt(painted, p, 10 / vp.zoom);
@@ -595,11 +658,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       }
       case 'frame': {
         const n = elements.filter((el) => el.type === 'frame').length;
+        const g = snapPt(p, e.altKey);
         setDraft({
           id: newId(),
           type: 'frame',
-          x: p.x,
-          y: p.y,
+          x: g.x,
+          y: g.y,
           w: 0,
           h: 0,
           title: `Frame ${n + 1}`,
@@ -607,7 +671,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           color: 'ink',
           strokeWidth: 2,
         });
-        drag.current = { kind: 'draw', start: p };
+        drag.current = { kind: 'draw', start: g };
         return;
       }
       case 'note':
@@ -651,10 +715,18 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         }));
         return;
       case 'move': {
-        const dx = p.x - d.start.x;
-        const dy = p.y - d.start.y;
+        let dx = p.x - d.start.x;
+        let dy = p.y - d.start.y;
         if (!d.moved && Math.hypot(dx, dy) * vp.zoom < 3) return;
         d.moved = true;
+        if (d.box && !e.altKey) {
+          // Line up with other elements (smart guides); otherwise snap to the grid if it's on.
+          const moved = { ...d.box, x: d.box.x + dx, y: d.box.y + dy };
+          const a = alignSnap(moved, d.others, 6 / vp.zoom);
+          dx += a.dx ?? (snapGrid ? snapToGrid(moved.x, gridSize) - moved.x : 0);
+          dy += a.dy ?? (snapGrid ? snapToGrid(moved.y, gridSize) - moved.y : 0);
+          setGuides(a.guides);
+        } else setGuides([]);
         setElements(
           d.before.map((el) => {
             if (!d.ids.has(el.id)) return el;
@@ -673,10 +745,17 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           const snap = attachableAt(painted, p, 10 / vp.zoom, other ?? undefined);
           d.snap = snap?.id ?? null;
           setSnapId(d.snap);
-          setElements(d.before.map((el) => (el.id !== d.id || el.type !== 'arrow' ? el : d.end === 'start' ? { ...el, x1: p.x, y1: p.y, from: null } : { ...el, x2: p.x, y2: p.y, to: null })));
+          const q = snap ? p : snapPt(p, e.altKey);
+          setElements(d.before.map((el) => (el.id !== d.id || el.type !== 'arrow' ? el : d.end === 'start' ? { ...el, x1: q.x, y1: q.y, from: null } : { ...el, x2: q.x, y2: q.y, to: null })));
           return;
         }
-        setElements(d.before.map((el) => (el.id === d.id ? resizeElement(el, p) : el)));
+        let rp = p;
+        if (target && rotationOf(target) === 0 && !e.altKey) {
+          const a = alignSnap({ x: p.x, y: p.y, w: 0, h: 0 }, guideTargets(new Set([d.id]), d.before), 6 / vp.zoom);
+          rp = { x: p.x + (a.dx ?? (snapGrid ? snapToGrid(p.x, gridSize) - p.x : 0)), y: p.y + (a.dy ?? (snapGrid ? snapToGrid(p.y, gridSize) - p.y : 0)) };
+          setGuides(a.guides);
+        }
+        setElements(d.before.map((el) => (el.id === d.id ? resizeElement(el, rp) : el)));
         return;
       }
       case 'rotate': {
@@ -704,10 +783,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           if (cur.type === 'arrow') {
             const snap = attachableAt(painted, p, 10 / vp.zoom, cur.from ?? undefined);
             setSnapId(snap?.id ?? null);
-            return { ...cur, x2: p.x, y2: p.y, to: snap?.id ?? null };
+            const q = snap ? p : snapPt(p, e.altKey);
+            return { ...cur, x2: q.x, y2: q.y, to: snap?.id ?? null };
           }
           if (cur.type === 'rect' || cur.type === 'ellipse' || cur.type === 'frame') {
-            let r = normalizeRect(d.start.x, d.start.y, p.x, p.y);
+            const g = snapPt(p, e.altKey);
+            let r = normalizeRect(d.start.x, d.start.y, g.x, g.y);
             if (e.shiftKey) {
               const s = Math.max(r.w, r.h);
               r = {
@@ -740,6 +821,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     const d = drag.current;
     drag.current = null;
     setSnapId(null);
+    setGuides([]);
     if (!d) return;
     switch (d.kind) {
       case 'place':
@@ -769,7 +851,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         if (r.w * vp.zoom < 3 && r.h * vp.zoom < 3) return;
         // Frames are picked only when the box covers them completely.
         const ids = elements.filter((el) => (el.type === 'frame' ? containsRect(r, elementBounds(el)) : rectsIntersect(elementBounds(el), r))).map((el) => el.id);
-        setSelected((cur) => (d.additive ? [...new Set([...cur, ...ids])] : ids));
+        const picked = withGroups(elements, ids);
+        setSelected((cur) => (d.additive ? [...new Set([...cur, ...picked])] : picked));
         return;
       }
       case 'draw': {
@@ -803,10 +886,15 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     // Double-clicking the rotate handle straightens the selection.
     if (rotateHandle && onRotateHandle(p)) {
       const ids = new Set(selected);
-      commit(elements.map((el) => (ids.has(el.id) && rotationOf(el) ? rotateElement(el, -rotationOf(el), centerOfRect(localBounds(el))) : el)));
+      commit(elements.map((el) => (ids.has(el.id) && !el.locked && rotationOf(el) ? rotateElement(el, -rotationOf(el), centerOfRect(localBounds(el))) : el)));
       return;
     }
     const hit = topmostAt(painted, p, 6 / vp.zoom);
+    if (hit?.locked && (hit.type === 'note' || hit.type === 'text' || hit.type === 'arrow' || hit.type === 'frame')) {
+      setSelected([hit.id]);
+      useStore.getState().notify('That item is locked. Unlock it to edit (Ctrl+Shift+L).', 'info');
+      return;
+    }
     if (hit && (hit.type === 'note' || hit.type === 'text')) {
       setSelected([hit.id]);
       setEditingId(hit.id);
@@ -822,8 +910,10 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
 
   /** Elements to move with a selection: frames carry what's inside them; lone arrows let go. */
   const moveSet = (sel: ID[]): { ids: Set<ID>; detach: Set<ID> } => {
-    const ids = new Set(sel);
-    for (const el of elements) if (ids.has(el.id) && el.type === 'frame') elementsInFrame(el, elements).forEach((id) => ids.add(id));
+    // Locked elements stay put, even inside a moving frame.
+    const locked = new Set(elements.filter((el) => el.locked).map((el) => el.id));
+    const ids = new Set(sel.filter((id) => !locked.has(id)));
+    for (const el of elements) if (ids.has(el.id) && el.type === 'frame') elementsInFrame(el, elements).forEach((id) => !locked.has(id) && ids.add(id));
     const detach = new Set<ID>();
     for (const el of elements) {
       if (el.type !== 'arrow' || !ids.has(el.id) || (!el.from && !el.to)) continue;
@@ -904,14 +994,27 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       setSelected(copies.map((c) => c.id));
       return;
     }
+    if (mod && k === 'g') {
+      e.preventDefault();
+      if (e.shiftKey) ungroupSelection();
+      else groupSelection();
+      return;
+    }
+    if (mod && e.shiftKey && k === 'l') {
+      e.preventDefault();
+      toggleLock();
+      return;
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
       e.preventDefault();
-      commit(elements.filter((el) => !selected.includes(el.id)));
-      setSelected([]);
+      const kept = selectedEls.filter((el) => el.locked);
+      commit(elements.filter((el) => !selected.includes(el.id) || el.locked));
+      setSelected(kept.map((el) => el.id));
+      if (kept.length) useStore.getState().notify(`${kept.length === 1 ? 'A locked item was' : `${kept.length} locked items were`} kept. Unlock to delete.`, 'info');
       return;
     }
     if (e.key === 'Escape') return setSelected([]);
-    if (e.key === 'Enter' && single && (single.type === 'note' || single.type === 'text')) {
+    if (e.key === 'Enter' && single && !single.locked && (single.type === 'note' || single.type === 'text')) {
       e.preventDefault();
       setEditingId(single.id);
       return;
@@ -948,6 +1051,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       if (e.key === '-') return zoomAt(1 / 1.25);
       if (e.key === '0') return setVp((v) => ({ ...v, zoom: 1 }));
       if (k === 'm') return toggleMinimap();
+      if (k === 'g') return toggleSnap();
       if (k === 'i') return fileRef.current?.click();
       const t = TOOLS.find((x) => x.key.toLowerCase() === k);
       if (t) setTool(t.value);
@@ -1032,7 +1136,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
             const ids = new Set(selected);
             commit(
               elements.map((el) => {
-                if (!ids.has(el.id)) return el;
+                if (!ids.has(el.id) || el.locked) return el;
                 if (el.type === 'note')
                   return {
                     ...el,
@@ -1069,6 +1173,14 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         fillNow={shapeSelection.length && shapeSelection.every((s) => fillModeOf(s.fill) === fillModeOf(shapeSelection[0].fill)) ? fillModeOf(shapeSelection[0].fill) : undefined}
         canRotate={!!rotateHandle}
         onRotate={(deg) => rotateSelection(deg)}
+        snapGrid={snapGrid}
+        onToggleSnap={toggleSnap}
+        canGroup={selectedEls.length > 1 && !(selGroups.length === 1 && selectedEls.every((el) => el.groupId === selGroups[0]))}
+        canUngroup={selectedEls.some((el) => el.groupId)}
+        onGroup={groupSelection}
+        onUngroup={ungroupSelection}
+        lockState={!selectedEls.length ? null : selectedEls.every((el) => el.locked) ? 'locked' : 'unlocked'}
+        onToggleLock={toggleLock}
         onPickImage={() => fileRef.current?.click()}
       />
       <input
@@ -1210,11 +1322,28 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
                   width={selBounds.w + 8 / vp.zoom}
                   height={selBounds.h + 8 / vp.zoom}
                   fill="none"
-                  stroke={theme.palette.primary.main}
+                  stroke={selectedEls.every((el) => el.locked) ? theme.palette.text.disabled : theme.palette.primary.main}
                   strokeWidth={1.5 / vp.zoom}
-                  strokeDasharray={`${6 / vp.zoom} ${4 / vp.zoom}`}
+                  // A whole group gets a solid outline, like one object.
+                  strokeDasharray={oneGroup ? undefined : `${6 / vp.zoom} ${4 / vp.zoom}`}
                 />
               )}
+              {!editingId &&
+                selectedEls
+                  .filter((el) => el.locked)
+                  .map((el) => {
+                    const b = elementBounds(el);
+                    return (
+                      <g key={`lock-${el.id}`} transform={`translate(${b.x + b.w} ${b.y}) scale(${1 / vp.zoom})`} aria-label="Locked">
+                        <circle r={11} fill={theme.palette.background.paper} stroke={theme.palette.text.secondary} strokeWidth={1} />
+                        <rect x={-4.5} y={-1.5} width={9} height={7} rx={1.5} fill={theme.palette.text.secondary} />
+                        <path d="M -2.8 -1.5 V -4 A 2.8 2.8 0 0 1 2.8 -4 V -1.5" fill="none" stroke={theme.palette.text.secondary} strokeWidth={1.6} />
+                      </g>
+                    );
+                  })}
+              {guides.map((g, i) => (
+                <line key={`guide-${i}`} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke="#ff4081" strokeWidth={1 / vp.zoom} strokeDasharray={`${4 / vp.zoom} ${3 / vp.zoom}`} />
+              ))}
               {single && !editingId && single.type !== 'arrow' && rotationOf(single) === 0 && (
                 <rect
                   x={selBounds!.x + selBounds!.w - handleSize / 2}

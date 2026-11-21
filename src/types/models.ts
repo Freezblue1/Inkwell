@@ -348,6 +348,10 @@ interface WbBase {
    * frames stay upright.
    */
   rotation?: number;
+  /** Elements sharing a group id are selected, moved and turned together. */
+  groupId?: ID;
+  /** Locked elements can be selected but not moved, resized, restyled, edited or deleted. */
+  locked?: boolean;
 }
 
 export interface WbPath extends WbBase {

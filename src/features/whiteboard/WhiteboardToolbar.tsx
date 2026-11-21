@@ -21,6 +21,11 @@ import CropFreeIcon from '@mui/icons-material/CropFree';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import MapIcon from '@mui/icons-material/MapOutlined';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
+import GroupWorkIcon from '@mui/icons-material/GroupWorkOutlined';
+import LayersClearIcon from '@mui/icons-material/LayersClearOutlined';
+import LockIcon from '@mui/icons-material/LockOutlined';
+import LockOpenIcon from '@mui/icons-material/LockOpenOutlined';
+import GridOnIcon from '@mui/icons-material/GridOn';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { useTheme } from '@mui/material/styles';
 import { INK_COLORS, NOTE_COLORS, NOTE_TEXT_COLORS, noteFill, type FillMode } from '@/lib/whiteboard';
@@ -122,6 +127,16 @@ interface Props {
   /** Something selected can be turned. */
   canRotate?: boolean;
   onRotate?: (deg: number) => void;
+  /** Snap to grid. */
+  snapGrid?: boolean;
+  onToggleSnap?: () => void;
+  canGroup?: boolean;
+  canUngroup?: boolean;
+  onGroup?: () => void;
+  onUngroup?: () => void;
+  /** null when nothing is selected. */
+  lockState?: 'locked' | 'unlocked' | null;
+  onToggleLock?: () => void;
 }
 
 /** Floating tool palette for the whiteboard. */
@@ -164,6 +179,34 @@ export function WhiteboardToolbar(p: Props) {
           <AddPhotoAlternateIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+      {p.canGroup && (
+        <Tooltip title="Group (Ctrl+G) — select, move and turn them as one">
+          <IconButton size="small" aria-label="Group" onClick={p.onGroup}>
+            <GroupWorkIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {p.canUngroup && (
+        <Tooltip title="Ungroup (Ctrl+Shift+G)">
+          <IconButton size="small" aria-label="Ungroup" onClick={p.onUngroup}>
+            <LayersClearIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {p.lockState && (
+        <Tooltip title={p.lockState === 'locked' ? 'Unlock (Ctrl+Shift+L)' : 'Lock so it can’t be moved or changed (Ctrl+Shift+L)'}>
+          <IconButton size="small" aria-label={p.lockState === 'locked' ? 'Unlock' : 'Lock'} aria-pressed={p.lockState === 'locked'} onClick={p.onToggleLock} color={p.lockState === 'locked' ? 'primary' : 'default'}>
+            {p.lockState === 'locked' ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+      )}
+      {p.onToggleSnap && (
+        <Tooltip title={`Snap to grid (G) — ${p.snapGrid ? 'on' : 'off'}. Hold Alt to place freely.`}>
+          <ToggleButton size="small" value="snap" selected={!!p.snapGrid} onChange={p.onToggleSnap} aria-label="Snap to grid" sx={{ px: 1, border: 0 }}>
+            <GridOnIcon fontSize="small" />
+          </ToggleButton>
+        </Tooltip>
+      )}
       {p.canRotate && p.onRotate && (
         <>
           <Tooltip title="Rotate left 15° ( [ ) · Shift+[ for 90° · or drag the round handle">

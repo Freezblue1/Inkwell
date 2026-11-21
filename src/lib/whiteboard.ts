@@ -506,14 +506,73 @@ export function routeConnectors(els: WbElement[]): WbElement[] {
   return changed ? out : els;
 }
 
+// ── Groups, grid and alignment guides ─────────────────────────────────────
+
+/** The ids plus every other member of their groups (selection works on whole groups). */
+export function withGroups(els: WbElement[], ids: Iterable<ID>): ID[] {
+  const set = new Set(ids);
+  const groups = new Set(els.filter((e) => set.has(e.id) && e.groupId).map((e) => e.groupId!));
+  if (!groups.size) return [...set];
+  for (const e of els) if (e.groupId && groups.has(e.groupId)) set.add(e.id);
+  return [...set];
+}
+
+/** Groups whose members are all in the selection. */
+export function selectedGroups(els: WbElement[], ids: Iterable<ID>): ID[] {
+  const set = new Set(ids);
+  const out = new Set<ID>();
+  for (const e of els) if (e.groupId && set.has(e.id)) out.add(e.groupId);
+  return [...out].filter((g) => els.every((e) => e.groupId !== g || set.has(e.id)));
+}
+
+export const snapToGrid = (v: number, grid: number) => Math.round(v / grid) * grid;
+
+export interface Guide {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/**
+ * Canva-style smart guides: nudges a moving box so its left/centre/right or
+ * top/middle/bottom lines up with another box when it's within `threshold`,
+ * and returns the guide lines to draw. `dx`/`dy` are null when nothing lines up.
+ */
+export function alignSnap(moving: Rect, others: Rect[], threshold: number): { dx: number | null; dy: number | null; guides: Guide[] } {
+  const xs = (r: Rect) => [r.x, r.x + r.w / 2, r.x + r.w];
+  const ys = (r: Rect) => [r.y, r.y + r.h / 2, r.y + r.h];
+  let dx: number | null = null;
+  let dy: number | null = null;
+  for (const o of others) {
+    for (const m of xs(moving)) for (const t of xs(o)) if (Math.abs(t - m) <= threshold && (dx === null || Math.abs(t - m) < Math.abs(dx))) dx = t - m;
+    for (const m of ys(moving)) for (const t of ys(o)) if (Math.abs(t - m) <= threshold && (dy === null || Math.abs(t - m) < Math.abs(dy))) dy = t - m;
+  }
+  const box = { ...moving, x: moving.x + (dx ?? 0), y: moving.y + (dy ?? 0) };
+  const guides: Guide[] = [];
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
+  for (const o of others) {
+    if (dx !== null)
+      for (const m of xs(box))
+        if (xs(o).some((t) => near(t, m))) guides.push({ x1: m, y1: Math.min(box.y, o.y), x2: m, y2: Math.max(box.y + box.h, o.y + o.h) });
+    if (dy !== null)
+      for (const m of ys(box))
+        if (ys(o).some((t) => near(t, m))) guides.push({ x1: Math.min(box.x, o.x), y1: m, x2: Math.max(box.x + box.w, o.x + o.w), y2: m });
+  }
+  return { dx, dy, guides };
+}
+
 /**
  * Copies elements with fresh ids. Arrows attached to elements inside the copied
  * set are re-attached to the copies; attachments outside the set are dropped.
  */
 export function copyElements(els: WbElement[], makeId: () => string, dx = 0, dy = 0): WbElement[] {
   const ids = new Map(els.map((e) => [e.id, makeId()]));
+  // Copies form their own groups, and start unlocked.
+  const groups = new Map<ID, ID>();
+  for (const e of els) if (e.groupId && !groups.has(e.groupId)) groups.set(e.groupId, makeId());
   return els.map((el) => {
-    const moved = { ...moveElement(el, dx, dy), id: ids.get(el.id)! };
+    const moved = { ...moveElement(el, dx, dy), id: ids.get(el.id)!, groupId: el.groupId ? groups.get(el.groupId) : undefined, locked: undefined };
     if (moved.type !== 'arrow') return moved;
     return { ...moved, from: moved.from ? ids.get(moved.from) ?? null : null, to: moved.to ? ids.get(moved.to) ?? null : null };
   });

@@ -13,6 +13,10 @@ import {
   fillModeOf,
   hitTest,
   moveElement,
+  alignSnap,
+  selectedGroups,
+  snapToGrid,
+  withGroups,
   normalizeAngle,
   rotateElement,
   rotatePoint,
@@ -240,5 +244,43 @@ describe('text boxes and fills', () => {
     expect(fillModeOf('#e5393533')).toBe('transparent');
     expect(fillModeOf('ink')).toBe('solid');
     expect(fillModeOf('none')).toBe('none');
+  });
+});
+
+describe('groups, grid and guides', () => {
+  const box = (id: string, x: number, y: number, extra: Partial<WbShape> = {}): WbShape => ({ id, type: 'rect', x, y, w: 100, h: 50, fill: 'none', color: 'ink', strokeWidth: 2, ...extra });
+
+  it('selects whole groups and knows which groups are fully selected', () => {
+    const els = [box('a', 0, 0, { groupId: 'g' }), box('b', 200, 0, { groupId: 'g' }), box('c', 400, 0)];
+    expect(withGroups(els, ['a']).sort()).toEqual(['a', 'b']);
+    expect(withGroups(els, ['c'])).toEqual(['c']);
+    expect(selectedGroups(els, ['a', 'b', 'c'])).toEqual(['g']);
+    expect(selectedGroups(els, ['a'])).toEqual([]);
+  });
+
+  it('copies groups as new groups, unlocked', () => {
+    let n = 0;
+    const copies = copyElements([box('a', 0, 0, { groupId: 'g', locked: true }), box('b', 0, 0, { groupId: 'g' })], () => `n${++n}`);
+    expect(copies[0].groupId).toBeTruthy();
+    expect(copies[0].groupId).not.toBe('g');
+    expect(copies[0].groupId).toBe(copies[1].groupId);
+    expect(copies[0].locked).toBeUndefined();
+  });
+
+  it('snaps to a grid', () => {
+    expect(snapToGrid(37, 24)).toBe(48);
+    expect(snapToGrid(-13, 24)).toBe(-24);
+  });
+
+  it('lines a moving box up with others and returns guide lines', () => {
+    const other = { x: 300, y: 100, w: 100, h: 50 };
+    // Left edges 3px apart, middles 4px apart vertically.
+    const r = alignSnap({ x: 303, y: 206, w: 80, h: 40 }, [other], 6);
+    expect(r.dx).toBe(-3);
+    expect(r.guides.some((g) => g.x1 === 300 && g.x2 === 300)).toBe(true);
+    expect(alignSnap({ x: 600, y: 600, w: 10, h: 10 }, [other], 6)).toEqual({ dx: null, dy: null, guides: [] });
+    const mid = alignSnap({ x: 500, y: 121, w: 80, h: 6 }, [other], 6); // centres: 124 vs 125
+    expect(mid.dy).toBe(1);
+    expect(mid.guides.some((g) => g.y1 === 125 && g.y2 === 125)).toBe(true);
   });
 });
