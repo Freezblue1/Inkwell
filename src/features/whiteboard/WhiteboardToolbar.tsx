@@ -15,13 +15,15 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import CenterFocusWeakIcon from '@mui/icons-material/CenterFocusWeak';
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill';
+import FormatColorResetIcon from '@mui/icons-material/FormatColorReset';
+import OpacityIcon from '@mui/icons-material/Opacity';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import MapIcon from '@mui/icons-material/MapOutlined';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { useTheme } from '@mui/material/styles';
-import { INK_COLORS, NOTE_COLORS, NOTE_TEXT_COLORS, noteFill } from '@/lib/whiteboard';
+import { INK_COLORS, NOTE_COLORS, NOTE_TEXT_COLORS, noteFill, type FillMode } from '@/lib/whiteboard';
 
 export type WbTool = 'select' | 'hand' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'note' | 'text' | 'frame' | 'eraser';
 
@@ -31,7 +33,8 @@ export interface WbStyle {
   noteColor: string;
   /** Text colour for new (and selected) sticky notes. */
   noteText: string;
-  filled: boolean;
+  /** Fill for new shapes: none, see-through or solid. */
+  fill: FillMode;
 }
 
 export const TOOLS: {
@@ -114,8 +117,8 @@ interface Props {
   onPickImage: () => void;
   /** Sticky notes are selected: show note paper and text colours. */
   noteSelection?: { fill: string; text: string } | null;
-  /** Whether the selected shapes are filled (undefined when no shape is selected). */
-  filledNow?: boolean;
+  /** Fill of the selected shapes (undefined when none are selected, or they differ). */
+  fillNow?: FillMode;
   /** Something selected can be turned. */
   canRotate?: boolean;
   onRotate?: (deg: number) => void;
@@ -294,11 +297,23 @@ export function WhiteboardToolbar(p: Props) {
               </MenuItem>
             ))}
           </Select>
-          <Tooltip title="Fill shapes">
-            <ToggleButton size="small" value="fill" selected={p.filledNow ?? p.style.filled} onChange={() => p.setStyle({ filled: !(p.filledNow ?? p.style.filled) })} aria-label="Fill shapes" sx={{ px: 1 }}>
-              <FormatColorFillIcon fontSize="small" />
-            </ToggleButton>
-          </Tooltip>
+          <ToggleButtonGroup size="small" exclusive value={p.fillNow ?? p.style.fill} onChange={(_, v: FillMode | null) => v && p.setStyle({ fill: v })} aria-label="Shape fill">
+            <Tooltip title="No fill">
+              <ToggleButton value="none" aria-label="No fill" sx={{ px: 0.75 }}>
+                <FormatColorResetIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="See-through fill">
+              <ToggleButton value="transparent" aria-label="See-through fill" sx={{ px: 0.75 }}>
+                <OpacityIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="Solid fill">
+              <ToggleButton value="solid" aria-label="Solid fill" sx={{ px: 0.75 }}>
+                <FormatColorFillIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+          </ToggleButtonGroup>
         </>
       )}
       <Divider orientation="vertical" flexItem />

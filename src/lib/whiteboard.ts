@@ -1,5 +1,5 @@
 /** Whiteboard geometry: bounds, hit-testing, moving, resizing and path smoothing. Pure functions. */
-import type { ID, WbArrow, WbElement, WbFrame, WbPath } from '@/types/models';
+import type { ID, WbArrow, WbElement, WbFrame, WbPath, WbText } from '@/types/models';
 
 export interface Point {
   x: number;
@@ -90,6 +90,37 @@ export function wrapText(text: string, width: number, fontSize: number, family =
   return out;
 }
 
+/** Width of one line of text in the whiteboard font. */
+export function measureLine(text: string, fontSize: number, family = 'Caveat, cursive'): number {
+  if (measureCtx === undefined) measureCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+  if (!measureCtx) return text.length * fontSize * 0.55; // same estimate as estimateLines
+  measureCtx.font = `${fontSize}px ${family}`;
+  return measureCtx.measureText(text).width;
+}
+
+/** A text box's width: as wide as its longest line, or the width it was resized to. */
+export function textBoxWidth(el: WbText, text = el.text): number {
+  if (el.autoWidth === false) return el.w;
+  const widest = Math.max(...(text || ' ').split('\n').map((line) => measureLine(line, el.fontSize)));
+  return Math.max(el.fontSize, Math.ceil(widest + el.fontSize * 0.5));
+}
+
+// ── Shape fills ─────────────────────────────────────────────────────────
+
+export type FillMode = 'none' | 'transparent' | 'solid';
+
+/** The SVG fill for a shape colour: none, see-through (40%) or solid ('ink' follows the theme's text colour). */
+export function fillFor(color: string, mode: FillMode): string {
+  if (mode === 'none') return 'none';
+  if (mode === 'solid') return color;
+  return `${color === 'ink' ? '#888888' : color}66`;
+}
+
+export function fillModeOf(fill: string): FillMode {
+  if (!fill || fill === 'none') return 'none';
+  return /^#[0-9a-f]{8}$/i.test(fill) ? 'transparent' : 'solid';
+}
+
 export function textHeight(text: string, width: number, fontSize: number): number {
   const lines = typeof document !== 'undefined' ? wrapText(text || ' ', width, fontSize).length : estimateLines(text || ' ', width, fontSize);
   return Math.max(1, lines) * fontSize * TEXT_LINE_HEIGHT;
@@ -171,8 +202,10 @@ export function localBounds(el: WbElement): Rect {
     }
     case 'arrow':
       return { x: Math.min(el.x1, el.x2), y: Math.min(el.y1, el.y2), w: Math.abs(el.x2 - el.x1), h: Math.abs(el.y2 - el.y1) };
-    case 'text':
-      return { x: el.x, y: el.y, w: el.w, h: textHeight(el.text, el.w, el.fontSize) };
+    case 'text': {
+      const w = textBoxWidth(el);
+      return { x: el.x, y: el.y, w, h: textHeight(el.text, w, el.fontSize) };
+    }
     case 'frame':
       // Includes the title bar above the frame.
       return { x: el.x, y: el.y - FRAME_TITLE_H, w: el.w, h: el.h + FRAME_TITLE_H };
@@ -303,7 +336,8 @@ export function resizeElement<T extends WbElement>(el: T, p: Point, min = 16): T
     case 'arrow':
       return { ...el, x2: p.x, y2: p.y };
     case 'text':
-      return { ...el, w: Math.max(min * 3, p.x - el.x) };
+      // Resizing by hand fixes the width; the text then wraps inside it.
+      return { ...el, w: Math.max(min * 3, p.x - el.x), autoWidth: false };
     case 'image': {
       // Pictures keep their proportions.
       const ratio = el.h / Math.max(1, el.w);

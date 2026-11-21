@@ -400,6 +400,8 @@ export interface WbText extends WbBase {
   w: number;
   text: string;
   fontSize: number;
+  /** The box hugs the text (no wrapping) unless it was resized by hand (false: wraps at w). */
+  autoWidth?: boolean;
 }
 
 /** A picture stored in the project's assets. */

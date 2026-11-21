@@ -1,6 +1,6 @@
 import { createContext, memo, useContext } from 'react';
 import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
-import { arrowHead, arrowLineEnd, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
+import { arrowHead, arrowLineEnd, textBoxWidth, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
 import { BIBLE_KIND_LABELS } from '@/lib/bible';
@@ -44,9 +44,9 @@ function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props)
     case 'path':
       return <path d={pointsToPath(el.points)} fill="none" stroke={color} strokeWidth={el.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />;
     case 'rect':
-      return <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={6} fill={el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
+      return <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={6} fill={el.fill === 'ink' ? ink : el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
     case 'ellipse':
-      return <ellipse cx={el.x + el.w / 2} cy={el.y + el.h / 2} rx={el.w / 2} ry={el.h / 2} fill={el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
+      return <ellipse cx={el.x + el.w / 2} cy={el.y + el.h / 2} rx={el.w / 2} ry={el.h / 2} fill={el.fill === 'ink' ? ink : el.fill} stroke={color} strokeWidth={el.strokeWidth} />;
     case 'arrow': {
       const label = hideText ? '' : el.label?.trim() ?? '';
       const mx = (el.x1 + el.x2) / 2;
@@ -115,7 +115,7 @@ function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props)
     }
     case 'text': {
       if (hideText) return null;
-      const lines = wrapText(el.text || ' ', el.w, el.fontSize);
+      const lines = wrapText(el.text || ' ', textBoxWidth(el), el.fontSize);
       return (
         <text fontFamily={WB_FONT} fontSize={el.fontSize} fill={color}>
           {lines.map((line, i) => (

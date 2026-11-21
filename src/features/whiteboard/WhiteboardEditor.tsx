@@ -47,6 +47,9 @@ import {
   DEFAULT_NOTE_TEXT,
   NOTE_COLORS,
   canRotate,
+  fillFor,
+  fillModeOf,
+  textBoxWidth,
   localBounds,
   rotateElement,
   rotatePoint,
@@ -142,7 +145,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     strokeWidth: 4,
     noteColor: NOTE_COLORS[0],
     noteText: DEFAULT_NOTE_TEXT,
-    filled: false,
+    fill: 'none',
   });
   const [selected, setSelected] = useState<ID[]>([]);
   const [draft, setDraft] = useState<WbElement | null>(null);
@@ -347,8 +350,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     return () => svg.removeEventListener('wheel', onWheel);
   }, [zoomAt]);
 
-  const fillFor = (color: string) => `${color === 'ink' ? '#888888' : color}66`;
-  const shapeFill = (color: string) => (style.filled ? fillFor(color) : 'none');
+  const shapeFill = (color: string) => fillFor(color, style.fill);
 
   const createAt = (type: 'note' | 'text', p: Point) => {
     const el: WbElement =
@@ -793,6 +795,11 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   const onDoubleClick = (e: MouseEvent<SVGSVGElement>) => {
     if (tool !== 'select') return;
     const p = toWorld(e.clientX, e.clientY);
+    // Double-clicking the corner of a resized text box makes it fit its text again.
+    if (single?.type === 'text' && single.autoWidth === false && handleAt(p)) {
+      commit(elements.map((el) => (el.id === single.id && el.type === 'text' ? { ...el, autoWidth: true } : el)));
+      return;
+    }
     // Double-clicking the rotate handle straightens the selection.
     if (rotateHandle && onRotateHandle(p)) {
       const ids = new Set(selected);
@@ -1021,7 +1028,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         setStyle={(patch) => {
           setStyleState((s) => ({ ...s, ...patch }));
           // Restyle the selection too.
-          if (selectedEls.length && (patch.color || patch.strokeWidth || patch.noteColor || patch.noteText || patch.filled !== undefined)) {
+          if (selectedEls.length && (patch.color || patch.strokeWidth || patch.noteColor || patch.noteText || patch.fill !== undefined)) {
             const ids = new Set(selected);
             commit(
               elements.map((el) => {
@@ -1036,10 +1043,10 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
                 if (el.type === 'image' || el.type === 'card') return el;
                 if (el.type === 'rect' || el.type === 'ellipse') {
                   const color = patch.color ?? el.color;
-                  const filled = patch.filled ?? el.fill !== 'none';
-                  return { ...el, color, ...(patch.strokeWidth ? { strokeWidth: patch.strokeWidth } : {}), fill: filled ? fillFor(color) : 'none' };
+                  const mode = patch.fill ?? fillModeOf(el.fill);
+                  return { ...el, color, ...(patch.strokeWidth ? { strokeWidth: patch.strokeWidth } : {}), fill: fillFor(color, mode) };
                 }
-                if (patch.filled !== undefined && !patch.color && !patch.strokeWidth) return el;
+                if (patch.fill !== undefined && !patch.color && !patch.strokeWidth) return el;
                 return {
                   ...el,
                   ...(patch.color ? { color: patch.color } : {}),
@@ -1059,7 +1066,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         minimap={minimap}
         onToggleMinimap={toggleMinimap}
         noteSelection={noteSelection}
-        filledNow={shapeSelection.length ? shapeSelection.every((s) => s.fill !== 'none') : undefined}
+        fillNow={shapeSelection.length && shapeSelection.every((s) => fillModeOf(s.fill) === fillModeOf(shapeSelection[0].fill)) ? fillModeOf(shapeSelection[0].fill) : undefined}
         canRotate={!!rotateHandle}
         onRotate={(deg) => rotateSelection(deg)}
         onPickImage={() => fileRef.current?.click()}
@@ -1297,8 +1304,12 @@ function EditOverlay({ el, vp, color, onDone }: { el: Extract<WbElement, { type:
   const top = el.y * vp.zoom + vp.y + offset;
   const rot = el.rotation ?? 0;
   // Turn around the element's centre, which sits this far into the text box.
-  const originY = ((note ? el.h : textHeight(el.text || ' ', el.w, el.fontSize)) * vp.zoom) / 2 - offset;
-  const height = note ? el.h * vp.zoom - (el.docId ? 18 * vp.zoom : 0) : Math.max(fontSize * 1.6, textHeight(value || ' ', el.w, el.fontSize) * vp.zoom + fontSize * 0.4);
+  // Text boxes that hug their text grow as you type (no wrapping); resized ones wrap at their width.
+  const auto = !note && el.autoWidth !== false;
+  const boxW = note ? el.w : textBoxWidth(el, value);
+  const committedW = note ? el.w : textBoxWidth(el);
+  const originY = ((note ? el.h : textHeight(el.text || ' ', committedW, el.fontSize)) * vp.zoom) / 2 - offset;
+  const height = note ? el.h * vp.zoom - (el.docId ? 18 * vp.zoom : 0) : Math.max(fontSize * 1.6, textHeight(value || ' ', boxW, el.fontSize) * vp.zoom + fontSize * 0.4);
 
   return (
     <textarea
@@ -1318,7 +1329,8 @@ function EditOverlay({ el, vp, color, onDone }: { el: Extract<WbElement, { type:
         position: 'absolute',
         left: el.x * vp.zoom + vp.x,
         top,
-        width: el.w * vp.zoom,
+        width: (auto ? boxW + el.fontSize : boxW) * vp.zoom,
+        whiteSpace: auto ? 'pre' : undefined,
         height,
         padding: pad,
         boxSizing: 'border-box',
@@ -1334,7 +1346,7 @@ function EditOverlay({ el, vp, color, onDone }: { el: Extract<WbElement, { type:
         overflow: 'hidden',
         zIndex: 3,
         transform: rot ? `rotate(${rot}deg)` : undefined,
-        transformOrigin: `${(el.w * vp.zoom) / 2}px ${originY}px`,
+        transformOrigin: `${(committedW * vp.zoom) / 2}px ${originY}px`,
       }}
     />
   );

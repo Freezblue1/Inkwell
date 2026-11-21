@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WbArrow, WbElement, WbFrame, WbImage, WbNote, WbPath, WbShape } from '@/types/models';
+import type { WbArrow, WbElement, WbFrame, WbImage, WbNote, WbPath, WbShape, WbText } from '@/types/models';
 import {
   arrowHead,
   arrowLineEnd,
@@ -9,6 +9,8 @@ import {
   copyElements,
   elementBounds,
   elementsInFrame,
+  fillFor,
+  fillModeOf,
   hitTest,
   moveElement,
   normalizeAngle,
@@ -214,5 +216,29 @@ describe('rotation', () => {
     expect(above.y).toBeCloseTo(-30); // half the (rotated) height above the centre
     const right = boundaryPoint(r90, { x: 500, y: 20 }, 0);
     expect(right.x).toBeCloseTo(70);
+  });
+});
+
+describe('text boxes and fills', () => {
+  const text: WbText = { id: 't', type: 'text', x: 0, y: 0, w: 260, text: 'Hi', fontSize: 20, color: 'ink', strokeWidth: 1 };
+
+  it('fits a text box to its longest line unless it was resized', () => {
+    const short = elementBounds({ ...text });
+    const long = elementBounds({ ...text, text: 'A much longer line of text\nshort' });
+    expect(short.w).toBeLessThan(60);
+    expect(long.w).toBeGreaterThan(short.w * 5);
+    expect(long.h).toBeCloseTo(2 * 20 * 1.3); // two lines, no wrapping
+    const resized = resizeElement({ ...text }, { x: 400, y: 0 });
+    expect(resized.autoWidth).toBe(false);
+    expect(elementBounds(resized).w).toBe(400);
+  });
+
+  it('fills shapes not at all, see-through or solid', () => {
+    expect(fillFor('#e53935', 'none')).toBe('none');
+    expect(fillFor('#e53935', 'transparent')).toBe('#e5393566');
+    expect(fillFor('#e53935', 'solid')).toBe('#e53935');
+    expect(fillModeOf('#e5393533')).toBe('transparent');
+    expect(fillModeOf('ink')).toBe('solid');
+    expect(fillModeOf('none')).toBe('none');
   });
 });
