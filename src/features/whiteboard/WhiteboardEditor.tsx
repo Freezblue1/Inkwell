@@ -501,6 +501,15 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     return true;
   };
 
+  /** Keeps receiving this pointer's events outside the canvas (ignored if the browser refuses, e.g. a pointer that already lifted). */
+  const capturePointer = (e: RPointerEvent<SVGSVGElement>) => {
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* not capturable */
+    }
+  };
+
   // Fingers currently on the canvas (touchscreens), in coordinates relative to the canvas.
   const touches = useRef(new Map<number, Point>());
   const touchPoint = (e: RPointerEvent<SVGSVGElement>): Point => {
@@ -526,7 +535,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     if (e.pointerType === 'touch') {
       touches.current.set(e.pointerId, touchPoint(e));
       if (touches.current.size === 2) {
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        capturePointer(e);
         startPinch();
         return;
       }
@@ -534,7 +543,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     }
     if (editingId) return;
     wrapRef.current?.focus({ preventScroll: true });
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    capturePointer(e);
     const p = toWorld(e.clientX, e.clientY);
     if (e.button === 1 || tool === 'hand' || spaceDown) {
       drag.current = {

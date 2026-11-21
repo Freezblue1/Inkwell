@@ -19,6 +19,9 @@ const DIST = path.join(__dirname, '..', 'dist');
 const ORIGIN = 'app://inkwell';
 const STATE_FILE = () => path.join(app.getPath('userData'), 'window-state.json');
 
+// A separate profile folder (end-to-end tests, or keeping two setups apart). Must come before the single-instance lock.
+if (process.env.INKWELL_USER_DATA) app.setPath('userData', process.env.INKWELL_USER_DATA);
+
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
 app.setAppUserModelId('app.inkwell.desktop');

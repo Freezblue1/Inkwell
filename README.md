@@ -239,6 +239,21 @@ All types are documented in [`src/types/models.ts`](src/types/models.ts). In cod
 
 **Migrations:** `db.ts` declares `version(1)` (the initial schema) and `version(2)` (adds `revisions` and `backups`, and normalizes document metadata in `.upgrade()`). To change the schema, add a new `version(n)` block and never edit a shipped one.
 
+## Automated tests
+
+```bash
+npm test             # unit tests (Vitest): data layer, geometry, import, continuity, sync rules…
+npm run e2e          # end-to-end tests (Playwright): builds the app, then runs both suites below
+npm run e2e:web      # the whiteboard in a real browser (Microsoft Edge)
+npm run e2e:desktop  # the desktop app in Electron (main process, preload, IPC, files)
+npm run e2e:report   # open the HTML report of the last run (with traces of failures)
+```
+
+- **Whiteboard (`e2e/web`)**: real mouse, keyboard and touch input against a production build. Sticky notes, notes with several tabs open, fills, arrows attaching only at edges and following shapes, rotation (handle, snapping, keys), groups and Ctrl-click, locking, alignment guides, snap to grid, text boxes fitting their text, undo/redo, reloading, tab groups and drag-reordering, and two-finger pinch-zoom/pan. Checks both what's drawn and what's saved in IndexedDB.
+- **Desktop (`e2e/desktop`)**: launches Electron from this folder with a throwaway profile (`INKWELL_USER_DATA`). The desktop bridge and sandbox; writing typed just before quitting surviving a restart; opening a `.inkwell` file passed on the command line; mirroring to a projects folder and picking up a change made there; the version and update status; and the whiteboard inside the app.
+- **Not covered**: the packaged exe's self-update swap (it needs a published release; checked by hand when releasing) and the native folder picker.
+- Uses the Edge and Electron already installed, so no browser download. `npm run release` runs both test suites before it publishes.
+
 ## Reliability and performance
 
 - **No data loss:** debounced saves (1.2 s); flush on blur, tab hide, `pagehide` and `beforeunload`; a synchronous localStorage recovery copy restored on next open; saves chained per document; quota errors surfaced with a retry; daily project snapshots, major-edit snapshots and rolling backups.

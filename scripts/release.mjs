@@ -6,7 +6,7 @@
  *   npm run release -- minor        → 1.0.0 → 1.1.0
  *   npm run release -- 2.0.0 --notes "Big rewrite"
  *
- * Runs the tests, bumps the version, builds a compressed Inkwell.exe, commits
+ * Runs the unit and end-to-end tests, bumps the version, builds a compressed Inkwell.exe, commits
  * and tags, pushes, and creates a GitHub release with the exe attached.
  * Without --notes the release notes list the commits since the last release.
  */
@@ -52,6 +52,8 @@ if (out('git', ['tag', '--list', tag])) {
 
 console.log(`Releasing Inkwell ${version} (was ${pkg.version})`);
 run('npm test');
+// End-to-end: the whiteboard in a browser and the desktop app in Electron.
+run('npm run e2e');
 
 pkg.version = version;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);

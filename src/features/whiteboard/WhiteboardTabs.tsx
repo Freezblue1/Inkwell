@@ -73,6 +73,9 @@ export function WhiteboardTabs(p: Props) {
   const [menu, setMenu] = useState<{ id: ID; position: { top: number; left: number } } | null>(null);
   const [groupMenu, setGroupMenu] = useState<{ group: WhiteboardGroup; position: { top: number; left: number } } | null>(null);
   const [allAnchor, setAllAnchor] = useState<HTMLElement | null>(null);
+  // Where the menus last opened: kept while they fade out (an undefined position left an invisible overlay behind that ate the next click).
+  const [menuAt, setMenuAt] = useState({ top: 0, left: 0 });
+  const [groupMenuAt, setGroupMenuAt] = useState({ top: 0, left: 0 });
   const [collapsed, setCollapsed] = useState<Set<ID>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(collapsedKey(p.projectId)) ?? '[]'));
@@ -147,6 +150,7 @@ export function WhiteboardTabs(p: Props) {
   const openMenu = (id: ID, e: MouseEvent) => {
     e.preventDefault();
     setMenu({ id, position: { top: e.clientY, left: e.clientX } });
+    setMenuAt({ top: e.clientY, left: e.clientX });
   };
   const keyIdx = menu ? keys.indexOf(menu.id) : -1;
   const menuBoard = menu ? byId.get(menu.id) : undefined;
@@ -186,6 +190,7 @@ export function WhiteboardTabs(p: Props) {
                           onContextMenu={(e: MouseEvent) => {
                             e.preventDefault();
                             setGroupMenu({ group: g, position: { top: e.clientY, left: e.clientX } });
+                            setGroupMenuAt({ top: e.clientY, left: e.clientX });
                           }}
                           sx={{
                             display: 'flex',
@@ -247,6 +252,7 @@ export function WhiteboardTabs(p: Props) {
                           e.preventDefault();
                           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                           setMenu({ id: b.id, position: { top: r.bottom, left: r.left } });
+                          setMenuAt({ top: r.bottom, left: r.left });
                         }
                         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                           const tabs = [...(e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
@@ -321,7 +327,7 @@ export function WhiteboardTabs(p: Props) {
       </Tooltip>
 
       {/* Tab menu */}
-      <Menu open={!!menu} onClose={() => setMenu(null)} anchorReference="anchorPosition" anchorPosition={menu?.position} MenuListProps={{ dense: true }}>
+      <Menu open={!!menu} onClose={() => setMenu(null)} anchorReference="anchorPosition" anchorPosition={menuAt} MenuListProps={{ dense: true }}>
         <MenuItem onClick={act(p.onRename)}>
           <ListItemIcon>
             <EditIcon fontSize="small" />
@@ -387,7 +393,7 @@ export function WhiteboardTabs(p: Props) {
       </Menu>
 
       {/* Group menu */}
-      <Menu open={!!groupMenu} onClose={() => setGroupMenu(null)} anchorReference="anchorPosition" anchorPosition={groupMenu?.position} MenuListProps={{ dense: true }}>
+      <Menu open={!!groupMenu} onClose={() => setGroupMenu(null)} anchorReference="anchorPosition" anchorPosition={groupMenuAt} MenuListProps={{ dense: true }}>
         {groupMenu && [
           <MenuItem
             key="rename"
