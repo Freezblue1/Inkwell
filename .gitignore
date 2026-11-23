@@ -9,3 +9,4 @@ release
 # Playwright
 e2e-report
 e2e-results
+test-results/

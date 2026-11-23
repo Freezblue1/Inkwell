@@ -40,3 +40,23 @@ test('any entry can be saved as your own template', async ({ page }) => {
   await page.getByRole('menuitem', { name: /Coastal landmark/ }).click();
   await expect(page.getByRole('dialog').getByLabel('Type')).toHaveValue('Lighthouse');
 });
+
+test('the name generator gives names that fit the age and varies each batch', async ({ page }) => {
+  await page.getByRole('button', { name: /Name generator/i }).click();
+  const dialog = page.getByRole('dialog', { name: 'Name generator' });
+  const names = dialog.getByRole('list', { name: 'Generated names' }).getByRole('listitem');
+  await expect(names).toHaveCount(12);
+
+  await dialog.getByLabel('Age').click();
+  await page.getByRole('option', { name: 'Elderly' }).click();
+  await dialog.getByLabel('Style').click();
+  await page.getByRole('option', { name: /Slavic/ }).click();
+  await expect(dialog.getByText('Names that were popular when someone this age was born.')).toBeVisible();
+  const first = await names.allInnerTexts();
+  expect(first.some((t) => /Russian|Polish|Czech/.test(t))).toBe(true);
+
+  await dialog.getByRole('button', { name: 'More names' }).click();
+  const second = await names.allInnerTexts();
+  expect(second.filter((t) => first.includes(t)).length).toBe(0);
+  await page.screenshot({ path: 'test-results/name-generator.png' });
+});
