@@ -252,7 +252,7 @@ export const BUILTIN_TEMPLATES: BibleTemplate[] = [
 ];
 
 const STORE_KEY = 'inkwell:bibleTemplates';
-const SKIP = new Set(['id', 'projectId', 'seriesId', 'kind', 'name', 'imageAssetId', 'tags', 'linkedIds', 'relationships', 'createdAt', 'updatedAt', 'color']);
+const SKIP = new Set(['id', 'projectId', 'seriesId', 'kind', 'name', 'imageAssetId', 'tags', 'linkedIds', 'boardIds', 'relationships', 'createdAt', 'updatedAt', 'color']);
 
 export function loadCustomTemplates(): BibleTemplate[] {
   try {

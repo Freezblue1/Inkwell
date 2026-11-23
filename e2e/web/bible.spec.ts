@@ -60,3 +60,35 @@ test('the name generator gives names that fit the age and varies each batch', as
   expect(second.filter((t) => first.includes(t)).length).toBe(0);
   await page.screenshot({ path: 'test-results/name-generator.png' });
 });
+
+test('entries link to whiteboard tabs and open them', async ({ page }) => {
+  // A board that already exists ("Brainstorm" is made on first visit).
+  await page.getByRole('tab', { name: 'Whiteboard', exact: true }).click();
+  await expect(page.getByRole('tab', { name: /Brainstorm/ })).toBeVisible();
+  await page.getByRole('tab', { name: 'Story Bible' }).click();
+
+  await page.getByRole('button', { name: /New character/ }).click();
+  await page.getByRole('menuitem', { name: /Blank/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Whiteboards').click();
+  await page.getByRole('option', { name: 'Brainstorm' }).click();
+
+  // A new board named after the entry, linked straight away.
+  await dialog.getByRole('button', { name: 'New whiteboard tab for this entry' }).click();
+  const prompt = page.getByRole('dialog').filter({ hasText: 'New whiteboard tab' });
+  await prompt.getByRole('textbox').fill('Kael’s journey');
+  await prompt.getByRole('button', { name: 'Create' }).click();
+  const editor = page.getByRole('dialog').filter({ hasText: 'Cross-links' });
+  await expect(editor.getByRole('button', { name: 'Kael’s journey' })).toBeVisible();
+  await expect(editor.getByRole('button', { name: 'Brainstorm' })).toBeVisible();
+
+  await editor.getByRole('button', { name: 'Kael’s journey' }).click();
+  const strip = page.locator('[role="tablist"][aria-label="Whiteboards"]');
+  await expect(strip.getByRole('tab', { name: /Kael’s journey/ })).toHaveAttribute('aria-selected', 'true');
+
+  // The links are saved with the entry.
+  await page.getByRole('tab', { name: 'Story Bible' }).click();
+  await page.getByText('No summary yet.').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Brainstorm' }).click();
+  await expect(strip.getByRole('tab', { name: /Brainstorm/ })).toHaveAttribute('aria-selected', 'true');
+});

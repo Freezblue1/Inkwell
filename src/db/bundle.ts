@@ -204,6 +204,7 @@ export async function importBundle(
       seriesId: shared ? seriesId : null,
       imageAssetId: remap(b.imageAssetId),
       linkedIds: remapList(b.linkedIds),
+      ...(b.boardIds ? { boardIds: remapList(b.boardIds) } : {}),
     };
     if (base.kind === 'character') {
       return { ...base, relationships: base.relationships.map((r) => ({ ...r, targetId: remap(r.targetId)! })) };

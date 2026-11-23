@@ -42,9 +42,13 @@ export interface UISlice {
   collapsed: Record<ID, boolean>;
   snacks: Snack[];
   focusCommentId: ID | null;
+  /** A whiteboard tab to show (set by links from elsewhere; the whiteboard view clears it). */
+  boardFocusId: ID | null;
 
   setView(view: View): void;
   setPlanTab(tab: PlanTab): void;
+  /** Opens a whiteboard tab (reopening it if it was closed). */
+  openWhiteboard(id: ID | null): void;
   setInspectorTab(tab: InspectorTab): void;
   setResearchDoc(id: ID | null): void;
   loadSettings(): Promise<void>;
@@ -113,9 +117,11 @@ export const createUISlice: SliceCreator<UISlice> = (set, get) => {
     collapsed: {},
     snacks: [],
     focusCommentId: null,
+    boardFocusId: null,
 
     setView: (view) => set({ view }),
     setPlanTab: (planTab) => set({ planTab, view: 'plan' }),
+    openWhiteboard: (boardFocusId) => set(boardFocusId ? { boardFocusId, planTab: 'whiteboard', view: 'plan' } : { boardFocusId: null }),
     setInspectorTab: (inspectorTab) => set({ inspectorTab }),
     setResearchDoc: (researchDocId) => set({ researchDocId }),
 

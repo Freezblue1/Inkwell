@@ -72,6 +72,32 @@ export function WhiteboardView() {
     };
   }, [projectId]);
 
+  // A link elsewhere (a Story Bible entry) asked for a board: show it, reopening it if closed.
+  const boardFocusId = useStore((s) => s.boardFocusId);
+  useEffect(() => {
+    if (!boardFocusId || !projectId || !boards) return;
+    useStore.getState().openWhiteboard(null);
+    void (async () => {
+      let list = boardsRef.current ?? [];
+      // Made since this view loaded (e.g. "New board" in a Story Bible entry).
+      if (!list.some((b) => b.id === boardFocusId)) {
+        const fresh = await listWhiteboards(projectId);
+        const known = new Set(list.map((b) => b.id));
+        list = [...list, ...fresh.filter((b) => !known.has(b.id))];
+        setBoards(list);
+      }
+      const target = list.find((b) => b.id === boardFocusId);
+      if (!target) return void notify('That whiteboard no longer exists.', 'warning');
+      if (!isOpen(target)) {
+        const reopened = { ...target, open: true, order: Math.max(-1, ...list.map((b) => b.order)) + 1 };
+        setBoards((l) => l?.map((b) => (b.id === target.id ? reopened : b)) ?? l);
+        await putWhiteboard(reopened);
+      }
+      rememberActive(target.id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardFocusId, projectId, boards === null]);
+
   /** Writes one board's pending changes now. */
   const flushBoard = useCallback(async (id: ID) => {
     const p = pending.current.get(id);

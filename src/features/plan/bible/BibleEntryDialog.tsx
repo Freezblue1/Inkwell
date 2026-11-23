@@ -25,7 +25,9 @@ import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternateOutlined
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
-import type { BibleEntry, Character, Relationship } from '@/types/models';
+import DashboardIcon from '@mui/icons-material/DashboardOutlined';
+import type { BibleEntry, Character, Relationship, Whiteboard } from '@/types/models';
+import { listWhiteboards, makeWhiteboard, putWhiteboard } from '@/db/repos/whiteboards';
 import { useStore } from '@/store';
 import { BIBLE_FIELDS, BIBLE_KIND_LABELS } from '@/lib/bible';
 import { addAsset, deleteAsset } from '@/db/repos/assets';
@@ -51,6 +53,17 @@ export default function BibleEntryDialog() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirty = useRef(false);
   const storedId = stored?.id;
+  const [boards, setBoards] = useState<Whiteboard[]>([]);
+
+  // The project's whiteboard tabs, to link this entry to.
+  useEffect(() => {
+    if (!storedId || !project) return;
+    let alive = true;
+    void listWhiteboards(project.id).then((list) => alive && setBoards(list));
+    return () => {
+      alive = false;
+    };
+  }, [storedId, project]);
 
   // Reset the draft only when a different entry is opened.
   useEffect(() => {
@@ -109,6 +122,25 @@ export default function BibleEntryDialog() {
   };
 
   const others = bible.filter((b) => b.id !== draft.id);
+  const boardIds = draft.boardIds ?? [];
+  // Boards of this project only (a series entry may carry links to another book's boards).
+  const linkedBoards = boardIds.map((bid) => boards.find((b) => b.id === bid)).filter((b): b is Whiteboard => !!b);
+  const boardOptions = [...boards].sort((a, b) => (a.group ? 0 : 1) - (b.group ? 0 : 1) || (a.group?.name ?? '').localeCompare(b.group?.name ?? '') || a.order - b.order);
+  const openBoard = (bid: string) => {
+    flushAndClose();
+    useStore.getState().openWhiteboard(bid);
+  };
+  /** Makes a whiteboard tab named after this entry and links it. */
+  const newBoard = async () => {
+    if (!project) return;
+    const name = await promptDialog({ title: 'New whiteboard tab', label: 'Name', initial: draft.name, confirmLabel: 'Create' });
+    if (!name?.trim()) return;
+    const wb = makeWhiteboard(project.id, name.trim(), Math.max(-1, ...boards.map((b) => b.order)) + 1);
+    await putWhiteboard(wb);
+    setBoards((l) => [...l, wb]);
+    set({ boardIds: [...boardIds, wb.id] });
+    useStore.getState().notify(`Created “${wb.name}”`, 'success', { label: 'Open', run: () => useStore.getState().openWhiteboard(wb.id) });
+  };
   const appearances = sceneSequence(docs).filter(
     (d) => d.metadata.linkedIds.includes(draft.id) || d.metadata.mentionIds.includes(draft.id) || d.metadata.pov === draft.id || d.metadata.locationId === draft.id,
   );
@@ -264,6 +296,38 @@ export default function BibleEntryDialog() {
               }
               renderInput={(p) => <TextField {...p} label="Cross-links" placeholder="Related entries" />}
             />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Autocomplete
+                multiple
+                fullWidth
+                options={boardOptions}
+                groupBy={boards.some((b) => b.group) ? (b) => b.group?.name ?? 'Other tabs' : undefined}
+                getOptionLabel={(b) => b.name}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                value={linkedBoards}
+                onChange={(_, v) => set({ boardIds: [...boardIds.filter((bid) => !boards.some((b) => b.id === bid)), ...v.map((b) => b.id)] })}
+                noOptionsText="No whiteboard tabs yet"
+                renderTags={(value, getTagProps) =>
+                  value.map((b, index) => (
+                    <Chip
+                      size="small"
+                      icon={<DashboardIcon />}
+                      label={b.name}
+                      {...getTagProps({ index })}
+                      key={b.id}
+                      title="Open this whiteboard"
+                      onClick={() => openBoard(b.id)}
+                    />
+                  ))
+                }
+                renderInput={(p) => <TextField {...p} label="Whiteboards" placeholder="Link whiteboard tabs" />}
+              />
+              <Tooltip title="New whiteboard tab for this entry">
+                <Button onClick={() => void newBoard()} startIcon={<AddIcon />} sx={{ flexShrink: 0 }}>
+                  New board
+                </Button>
+              </Tooltip>
+            </Stack>
             <Autocomplete
               multiple
               freeSolo

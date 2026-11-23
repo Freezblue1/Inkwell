@@ -195,6 +195,8 @@ interface BibleBase {
   tags: string[];
   /** Cross-links to other bible entries. */
   linkedIds: ID[];
+  /** Whiteboard tabs about this entry (missing in older data). */
+  boardIds?: ID[];
   notes: string;
   color: string;
   createdAt: Timestamp;
