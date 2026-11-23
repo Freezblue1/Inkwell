@@ -100,9 +100,16 @@ export function UpdateCard() {
   const busy = info.status === 'checking' || info.status === 'downloading';
   return (
     <Box sx={{ mt: 1.5 }}>
-      <Typography variant="body2">
-        Inkwell <b>{info.current}</b>
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="body2">
+          Inkwell <b>{info.current}</b>
+        </Typography>
+        {desktop()?.openDataFolder && (
+          <Button size="small" onClick={() => void desktop()!.openDataFolder!()}>
+            Open data folder
+          </Button>
+        )}
+      </Stack>
       {!info.supported ? (
         <Typography variant="body2" color="text.secondary">
           Automatic updates work in the packaged Inkwell.exe.

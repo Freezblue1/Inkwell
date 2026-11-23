@@ -14,7 +14,7 @@ export function InstallAppCard({ compact = false }: { compact?: boolean }) {
       <Stack direction="row" spacing={1} alignItems="center">
         <CheckCircleIcon color="success" fontSize="small" />
         <Typography variant="body2">
-          {isDesktop() ? 'Running as the Inkwell desktop app. Your data lives in your Windows profile (Help → Open data folder).' : `Running as an installed app${offlineReady ? ' · available offline' : ''}.`}
+          {isDesktop() ? 'Running as the Inkwell desktop app. Your data lives in your Windows profile (Settings → App → Open data folder).' : `Running as an installed app${offlineReady ? ' · available offline' : ''}.`}
         </Typography>
       </Stack>
     );

@@ -81,7 +81,9 @@ function createWindow() {
     title: 'Inkwell',
     backgroundColor: '#121318',
     icon: path.join(__dirname, 'icon.png'),
-    autoHideMenuBar: true,
+    // No menu bar: Alt is used inside the app (e.g. the whiteboard), and with an auto-hiding bar every Alt press flashed it.
+    // The menu still exists for its keyboard shortcuts (zoom, reload, dev tools); its other items are in Settings.
+    autoHideMenuBar: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -91,6 +93,7 @@ function createWindow() {
       spellcheck: true,
     },
   });
+  win.setMenuBarVisibility(false);
   if (state.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.loadURL(`${ORIGIN}/`);
@@ -168,6 +171,7 @@ ipcMain.on('renderer-ready', () => {
   rendererReady = true;
   while (queuedFiles.length && win) win.webContents.send('open-file', queuedFiles.shift());
 });
+ipcMain.handle('open-data-folder', () => shell.openPath(app.getPath('userData')));
 ipcMain.on('ready-to-close', () => {
   readyToClose = true;
   if (win && !win.isDestroyed()) win.close();

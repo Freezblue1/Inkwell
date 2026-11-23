@@ -148,3 +148,16 @@ test('the whiteboard works in the desktop app', async () => {
   await expect(canvas.locator('g.wb-world path[fill="#ffe45c"]')).toHaveCount(1);
   await quit(app);
 });
+
+test('has no menu bar for Alt to flash, and Settings can open the data folder', async () => {
+  const { app, win } = await launch();
+  const bar = await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    return { visible: w.isMenuBarVisible(), autoHide: w.isMenuBarAutoHide() };
+  });
+  // An auto-hiding menu bar pops up on every Alt press, which the whiteboard uses for free placement.
+  expect(bar).toEqual({ visible: false, autoHide: false });
+  await win.getByRole('button', { name: 'Open settings' }).first().click();
+  await expect(win.getByRole('button', { name: 'Open data folder' })).toBeVisible();
+  await quit(app);
+});

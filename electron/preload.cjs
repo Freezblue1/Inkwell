@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('inkwellDesktop', {
   ready() {
     ipcRenderer.send('renderer-ready');
   },
+  /** Opens the folder holding the app's data (Settings → App). */
+  openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
   /** Project folder sync: plain files in a folder the user picked (see electron/folders.cjs). */
   folders: {
     pick: (current) => ipcRenderer.invoke('folder-pick', current),

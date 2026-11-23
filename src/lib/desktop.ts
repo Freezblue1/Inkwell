@@ -21,6 +21,8 @@ export interface DesktopBridge {
   onOpenFile(cb: (file: { name: string; text: string }) => void): void;
   onAppClosing(cb: () => Promise<void> | void): void;
   ready(): void;
+  /** Missing in desktop builds older than 1.4.1. */
+  openDataFolder?: () => Promise<string>;
   /** Missing in desktop builds older than 1.0.2. */
   folders?: {
     pick(current?: string | null): Promise<string | null>;
