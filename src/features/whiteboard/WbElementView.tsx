@@ -1,5 +1,6 @@
 import { createContext, memo, useContext } from 'react';
-import type { WbCard, WbElement, WbFrame, WbImage } from '@/types/models';
+import type { WbCard, WbElement, WbFrame, WbImage, WbLink } from '@/types/models';
+import { linkInfo, PROVIDER_LABELS } from '@/lib/linkEmbed';
 import { arrowHead, arrowLineEnd, textBoxWidth, DEFAULT_NOTE_TEXT, FRAME_TITLE_H, localBounds, NOTE_FONT_SIZE, NOTE_PADDING, noteFill, noteTilt, pointsToPath, rotationOf, shade, TEXT_LINE_HEIGHT, wrapText } from '@/lib/whiteboard';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
 import { useStore } from '@/store';
@@ -23,6 +24,8 @@ interface Props {
   docTitle?: string;
   /** Background for arrow labels. */
   paper?: string;
+  /** A link's live preview takes the mouse (double-clicked to use it). */
+  interactive?: boolean;
 }
 
 /** Renders one whiteboard element as SVG, turned by its rotation. */
@@ -37,7 +40,7 @@ export const WbElementView = memo(function WbElementView(props: Props) {
   );
 });
 
-function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props) {
+function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff', interactive }: Props) {
   const defs = useContext(WbDefsContext);
   const color = el.color === 'ink' ? ink : el.color;
   switch (el.type) {
@@ -132,7 +135,76 @@ function ElementShape({ el, ink, hideText, docTitle, paper = '#ffffff' }: Props)
       return <CardView el={el} />;
     case 'frame':
       return <FrameView el={el} hideText={hideText} />;
+    case 'link':
+      return <LinkView el={el} interactive={!!interactive} />;
   }
+}
+
+export const LINK_HEADER_H = 40;
+const PROVIDER_COLORS: Record<string, string> = { maps: '#34a853', youtube: '#ff0000', vimeo: '#1ab7ea', spotify: '#1db954' };
+
+/** A link card: title and site, then a live preview (if the site allows embedding) or the address. */
+function LinkView({ el, interactive }: { el: WbLink; interactive: boolean }) {
+  const defs = useContext(WbDefsContext);
+  const info = linkInfo(el.url);
+  const embed = el.preview !== false ? info?.embedUrl ?? null : null;
+  const accent = (info?.provider && PROVIDER_COLORS[info.provider]) || '#5c6bc0';
+  const title = el.title || (info?.provider ? PROVIDER_LABELS[info.provider] : info?.host) || el.url;
+  const pad = 12;
+  const bodyY = el.y + LINK_HEADER_H;
+  const bodyH = Math.max(0, el.h - LINK_HEADER_H);
+  const urlLines = wrapText(info?.url ?? el.url, el.w - pad * 2, 12.5, UI_FONT);
+  return (
+    <g>
+      <clipPath id={`${defs}-link-${el.id}`}>
+        <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={10} />
+      </clipPath>
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={10} fill="#ffffff" filter={`url(#${defs}-shadow)`} />
+      <g clipPath={`url(#${defs}-link-${el.id})`}>
+        <rect x={el.x} y={el.y} width={el.w} height={LINK_HEADER_H} fill="#f6f7fb" />
+        <circle cx={el.x + 20} cy={el.y + LINK_HEADER_H / 2} r={8} fill={accent} />
+        <text x={el.x + 36} y={el.y + 17} fontSize={13} fontWeight={700} fontFamily={UI_FONT} fill="#212121">
+          {title.length > Math.floor((el.w - 80) / 7) ? `${title.slice(0, Math.max(4, Math.floor((el.w - 80) / 7) - 1))}…` : title}
+        </text>
+        <text x={el.x + 36} y={el.y + 32} fontSize={11} fontFamily={UI_FONT} fill="#666">
+          {info?.host ?? 'link'}
+        </text>
+        <text x={el.x + el.w - 24} y={el.y + 25} fontSize={16} fontFamily={UI_FONT} fill="#5d4037" style={{ cursor: 'pointer' }}>
+          ↗
+        </text>
+        {embed && bodyH > 20 ? (
+          <foreignObject x={el.x} y={bodyY} width={el.w} height={bodyH}>
+            <iframe
+              src={embed}
+              title={title}
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="fullscreen; encrypted-media; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+              style={{ width: '100%', height: '100%', border: 0, display: 'block', pointerEvents: interactive ? 'auto' : 'none' }}
+            />
+          </foreignObject>
+        ) : (
+          <text fontSize={12.5} fontFamily={UI_FONT} fill="#1565c0">
+            {urlLines.slice(0, Math.max(1, Math.floor((bodyH - pad) / 16))).map((line, i) => (
+              <tspan key={i} x={el.x + pad} y={bodyY + 18 + i * 16}>
+                {line}
+              </tspan>
+            ))}
+          </text>
+        )}
+      </g>
+      {embed && !interactive && bodyH > 60 && (
+        <g pointerEvents="none">
+          <rect x={el.x + el.w / 2 - 92} y={el.y + el.h - 30} width={184} height={22} rx={11} fill="rgba(0,0,0,0.6)" />
+          <text x={el.x + el.w / 2} y={el.y + el.h - 15} textAnchor="middle" fontSize={11.5} fontFamily={UI_FONT} fill="#fff">
+            Double-click to use the preview
+          </text>
+        </g>
+      )}
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={10} fill="none" stroke={interactive ? accent : 'rgba(0,0,0,0.14)'} strokeWidth={interactive ? 3 : 1} />
+    </g>
+  );
 }
 
 function ImageView({ el }: { el: WbImage }) {
@@ -164,8 +236,13 @@ function CardView({ el }: { el: WbCard }) {
   const maxLines = Math.max(0, Math.floor((el.h - 58) / 17));
   return (
     <g>
-      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="#ffffff" stroke="rgba(0,0,0,0.12)" filter={`url(#${defs}-shadow)`} />
-      <rect x={el.x} y={el.y} width={6} height={el.h} rx={3} fill={accent} />
+      <clipPath id={`${defs}-card-${el.id}`}>
+        <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} />
+      </clipPath>
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="#ffffff" filter={`url(#${defs}-shadow)`} />
+      {/* The colour strip follows the card's rounded corners instead of sticking out past them. */}
+      <rect x={el.x} y={el.y} width={6} height={el.h} fill={accent} clipPath={`url(#${defs}-card-${el.id})`} />
+      <rect x={el.x} y={el.y} width={el.w} height={el.h} rx={8} fill="none" stroke="rgba(0,0,0,0.12)" />
       <text x={el.x + pad + 6} y={el.y + pad + 9} fontSize={10.5} fontWeight={700} letterSpacing={0.8} fontFamily={UI_FONT} fill={accent}>
         {entry ? BIBLE_KIND_LABELS[entry.kind].singular.toUpperCase() : 'STORY BIBLE'}
       </text>

@@ -266,3 +266,68 @@ test('a selected arrow is outlined along its line, not with a box', async ({ pag
   await drag(page, [230, 170], [270, 230]); // across the line
   await expect(canvas(page).locator('[data-arrow-halo]')).toHaveCount(1);
 });
+
+test('copy, paste, cut and duplicate (keyboard and right-click menu)', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await drawRect(page, 100, 100, 120, 80);
+  await click(page, 101, 140);
+  await page.keyboard.press('Control+c');
+  // Paste where the pointer is.
+  const target = await (await import('./board')).at(page, 500, 400);
+  await page.mouse.move(target.x, target.y);
+  await page.keyboard.press('Control+v');
+  await expectSaved(page, (els) => rects(els).length === 2 && rects(els).some((r) => r.x === 440 && r.y === 360));
+  // Duplicate from the right-click menu.
+  await click(page, 101, 140);
+  const p = await (await import('./board')).at(page, 101, 140);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: /Duplicate/ }).click();
+  await expectSaved(page, (els) => rects(els).length === 3);
+  // Cut removes it, paste brings it back.
+  await page.keyboard.press('Control+x');
+  await expectSaved(page, (els) => rects(els).length === 2);
+  await page.keyboard.press('Control+v');
+  await expectSaved(page, (els) => rects(els).length === 3);
+  // Right-click on the empty board offers paste and select all.
+  const empty = await (await import('./board')).at(page, 900, 600);
+  await page.mouse.click(empty.x, empty.y, { button: 'right' });
+  await expect(page.getByRole('menuitem', { name: /Paste here/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Select all/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+});
+
+test('links: a Google Maps link shows a live map preview; other sites a link card', async ({ page }) => {
+  // Keep the tests offline: the preview frame's address is what matters here.
+  await page.route(/google\.com|gstatic|googleapis|wikipedia/, (r) => r.abort());
+  await toolbarButton(page, 'Add a link').click();
+  await answerPrompt(page, 'https://www.google.com/maps/place/Eiffel+Tower/@48.8584,2.2945,17z');
+  await expectSaved(page, (els) => els.some((e) => e.type === 'link' && (e as unknown as { url: string }).url.includes('Eiffel')));
+  const frame = canvas(page).locator('iframe');
+  await expect(frame).toHaveAttribute('src', 'https://maps.google.com/maps?q=Eiffel%20Tower&z=17&output=embed');
+  await expect(frame).toHaveCSS('pointer-events', 'none'); // the board keeps the mouse…
+  await expect(canvas(page).getByText('Double-click to use the preview')).toBeVisible();
+  const box = (await frame.boundingBox())!;
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + 40);
+  await expect(frame).toHaveCSS('pointer-events', 'auto'); // …until you double-click to use the map
+  await canvas(page).locator('..').focus();
+  await page.keyboard.press('Escape');
+  await expect(frame).toHaveCSS('pointer-events', 'none');
+  // A plain site: a card with the address, no frame.
+  await toolbarButton(page, 'Add a link').click();
+  await answerPrompt(page, 'en.wikipedia.org/wiki/Lighthouse');
+  await expect(canvas(page).getByText('https://en.wikipedia.org/wiki/Lighthouse')).toBeVisible();
+  await expect(canvas(page).locator('iframe')).toHaveCount(1);
+});
+
+test('Story Bible cards keep their colour strip inside the card', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Story Bible' }).click();
+  await page.getByRole('button', { name: /New character/ }).click();
+  await page.getByRole('menuitem', { name: /Blank/ }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Whiteboard', exact: true }).click();
+  await page.getByRole('button', { name: /Add Story Bible card/ }).click();
+  await page.getByRole('dialog').getByRole('combobox').click();
+  await page.getByRole('option').first().click(); // picking an entry adds its card
+  const strip = canvas(page).locator('rect[clip-path*="-card-"]');
+  await expect(strip).toHaveCount(1);
+});

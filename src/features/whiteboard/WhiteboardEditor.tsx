@@ -19,7 +19,9 @@ import {
   type PointerEvent as RPointerEvent,
   type SetStateAction,
 } from 'react';
-import { Box } from '@mui/material';
+import { Box, Divider, ListItemText, Menu, MenuItem } from '@mui/material';
+import { parseClip, placeCopies, serializeClip } from '@/lib/whiteboardClipboard';
+import { linkInfo, normalizeUrl, PROVIDER_LABELS } from '@/lib/linkEmbed';
 import { useTheme } from '@mui/material/styles';
 import type { ID, WbElement, Whiteboard } from '@/types/models';
 import { useStore } from '@/store';
@@ -100,6 +102,18 @@ type Drag =
   | { kind: 'pinch'; dist: number; mid: Point; vp: Viewport };
 
 const ROTATE_HANDLE_GAP = 28;
+
+/** Copied items, shared by every board in this window (the system clipboard carries them further). */
+let clipboard: WbElement[] | null = null;
+let pasteCount = 0;
+
+function Shortcut({ keys }: { keys: string }) {
+  return (
+    <Box component="span" sx={{ ml: 3, color: 'text.secondary', fontSize: 12 }}>
+      {keys}
+    </Box>
+  );
+}
 const angleOf = (p: Point, c: Point) => (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
 const centerOfRect = (r: { x: number; y: number; w: number; h: number }): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
@@ -494,6 +508,141 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     commit(elements.map((el) => (ids.has(el.id) ? { ...el, locked: lock || undefined } : el)));
   };
 
+  // ── Copy, cut, paste, duplicate, arrange ──────────────────────────────
+  const lastPointer = useRef<Point | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; at: Point } | null>(null);
+  const [ctxAt, setCtxAt] = useState({ top: 0, left: 0 });
+
+  /** The selection plus what's inside selected frames. */
+  const copySet = () => {
+    const ids = new Set(selected);
+    for (const el of elements) if (ids.has(el.id) && el.type === 'frame') elementsInFrame(el, elements).forEach((id) => ids.add(id));
+    return elements.filter((el) => ids.has(el.id));
+  };
+  const copySelection = () => {
+    const els = copySet();
+    if (!els.length) return false;
+    clipboard = els;
+    pasteCount = 0;
+    void navigator.clipboard?.writeText(serializeClip(els)).catch(() => {});
+    return true;
+  };
+  const cutSelection = () => {
+    if (!copySelection()) return;
+    const gone = new Set(copySet().filter((el) => !el.locked).map((el) => el.id));
+    commit(elements.filter((el) => !gone.has(el.id)));
+    setSelected(selectedEls.filter((el) => el.locked).map((el) => el.id));
+  };
+  /** Adds copies of `els` (centred on `at`, or shifted a little more with each paste) and selects them. */
+  const pasteItems = (els: WbElement[], at: Point | null) => {
+    const copies = placeCopies(els, newId, at, 24 * ++pasteCount);
+    if (!copies.length) return;
+    commit([...elementsRef.current, ...copies]);
+    setSelected(copies.map((c) => c.id));
+    setTool('select');
+  };
+  // ── Links ────────────────────────────────────────────────────────────
+  /** The link whose live preview is being used (it takes the mouse until you click elsewhere or press Esc). */
+  const [interactId, setInteractId] = useState<ID | null>(null);
+  const viewCenter = (): Point => {
+    const r = svgRef.current?.getBoundingClientRect();
+    return { x: ((r ? r.width / 2 : 400) - vp.x) / vp.zoom, y: ((r ? r.height / 2 : 300) - vp.y) / vp.zoom };
+  };
+  /** Adds a link card centred on `at`; sites that allow it get a live preview. */
+  const addLink = (raw: string, at: Point | null) => {
+    const info = linkInfo(raw);
+    if (!info) return false;
+    const p = at ?? viewCenter();
+    const [w, h] = info.embedUrl ? [420, info.provider === 'spotify' ? 200 : 300] : [320, 96];
+    const el: WbElement = {
+      id: newId(),
+      type: 'link',
+      x: snapGrid ? snapToGrid(p.x - w / 2, gridSize) : p.x - w / 2,
+      y: snapGrid ? snapToGrid(p.y - h / 2, gridSize) : p.y - h / 2,
+      w,
+      h,
+      url: info.url,
+      title: info.provider ? PROVIDER_LABELS[info.provider] : info.host,
+      preview: true,
+      color: 'ink',
+      strokeWidth: 1,
+    };
+    commit([...elementsRef.current, el]);
+    setSelected([el.id]);
+    setTool('select');
+    return true;
+  };
+  const askForLink = async (at: Point | null = null) => {
+    const raw = await promptDialog({ title: 'Add a link', label: 'Web address', initial: '', confirmLabel: 'Add' });
+    if (raw == null) return;
+    if (!addLink(raw, at)) useStore.getState().notify('That doesn’t look like a web address.', 'warning');
+  };
+  const editLink = async (el: Extract<WbElement, { type: 'link' }>) => {
+    const raw = await promptDialog({ title: 'Edit link', label: 'Web address', initial: el.url, confirmLabel: 'Save' });
+    if (raw == null) return;
+    const url = normalizeUrl(raw);
+    if (!url) return void useStore.getState().notify('That doesn’t look like a web address.', 'warning');
+    const title = await promptDialog({ title: 'Link title', label: 'Title', initial: el.title, confirmLabel: 'Save' });
+    commit(elementsRef.current.map((x) => (x.id === el.id ? { ...el, url, title: title?.trim() || el.title } : x)));
+  };
+  const openLink = (url: string) => window.open(url, '_blank', 'noopener,noreferrer');
+
+  const pasteText = (text: string, at: Point | null) => {
+    // A pasted web address becomes a link card.
+    if (!text.includes('\n') && addLink(text, at)) return;
+    const p = at ?? { x: (-vp.x + 200) / vp.zoom, y: (-vp.y + 200) / vp.zoom };
+    const el: WbElement = { id: newId(), type: 'text', x: p.x, y: p.y, w: 260, text: text.slice(0, 5000), fontSize: 24, color: style.color, strokeWidth: 1 };
+    commit([...elementsRef.current, el]);
+    setSelected([el.id]);
+  };
+  /** Paste from the menu: the system clipboard if it can be read, otherwise what was copied here. */
+  const pasteFromMenu = async (at: Point) => {
+    let text: string | null = null;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      /* not allowed: fall back to the in-app clipboard */
+    }
+    const els = parseClip(text);
+    if (els) pasteItems(els, at);
+    else if (clipboard) pasteItems(clipboard, at);
+    else if (text?.trim()) pasteText(text.trim(), at);
+  };
+  const duplicateSelection = () => {
+    if (!selectedEls.length) return;
+    const copies = placeCopies(copySet(), newId, null, 24);
+    commit([...elements, ...copies]);
+    setSelected(copies.map((c) => c.id));
+  };
+  const deleteSelection = () => {
+    const kept = selectedEls.filter((el) => el.locked);
+    commit(elements.filter((el) => !selected.includes(el.id) || el.locked));
+    setSelected(kept.map((el) => el.id));
+    if (kept.length) useStore.getState().notify(`${kept.length === 1 ? 'A locked item was' : `${kept.length} locked items were`} kept. Unlock to delete.`, 'info');
+  };
+  /** Bring to front (drawn last) or send to back (drawn first). */
+  const arrange = (toFront: boolean) => {
+    const ids = new Set(selected);
+    const picked = elements.filter((el) => ids.has(el.id));
+    const rest = elements.filter((el) => !ids.has(el.id));
+    commit(toFront ? [...rest, ...picked] : [...picked, ...rest]);
+  };
+
+  const onContextMenu = (e: MouseEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    if (editingId) return;
+    const p = toWorld(e.clientX, e.clientY);
+    const hit = topmostAt(painted, p, 6 / vp.zoom);
+    if (hit && !selected.includes(hit.id)) setSelected(withGroups(elements, [hit.id]));
+    if (!hit) setSelected([]);
+    setCtxMenu({ x: e.clientX, y: e.clientY, at: p });
+    setCtxAt({ top: e.clientY, left: e.clientX });
+  };
+  const menuAct = (fn: () => void) => () => {
+    setCtxMenu(null);
+    fn();
+  };
+
   const eraseAt = (p: Point): boolean => {
     const hit = topmostAt(paintOrder(elementsRef.current.filter((el) => !el.locked)), p, 8 / vp.zoom);
     if (!hit) return false;
@@ -542,6 +691,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       if (touches.current.size > 2) return;
     }
     if (editingId) return;
+    if (interactId) setInteractId(null);
     wrapRef.current?.focus({ preventScroll: true });
     capturePointer(e);
     const p = toWorld(e.clientX, e.clientY);
@@ -587,6 +737,11 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           if (hit.type === 'note' && hit.docId && p.x >= hit.x + hit.w - 28 && p.y <= hit.y + 28) {
             if (docs[hit.docId]) useStore.getState().openDoc(hit.docId);
             else useStore.getState().notify('That scene no longer exists.', 'warning');
+            return;
+          }
+          // Links: the ↗ corner opens the page in the browser.
+          if (hit.type === 'link' && p.x >= hit.x + hit.w - 34 && p.y <= hit.y + 40 && !rotationOf(hit)) {
+            openLink(hit.url);
             return;
           }
           // Story Bible cards: the ↗ corner opens the entry.
@@ -695,6 +850,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
   };
 
   const onPointerMove = (e: RPointerEvent<SVGSVGElement>) => {
+    lastPointer.current = toWorld(e.clientX, e.clientY);
     if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) touches.current.set(e.pointerId, touchPoint(e));
     const d = drag.current;
     if (d?.kind === 'pinch') {
@@ -904,6 +1060,12 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       useStore.getState().notify('That item is locked. Unlock it to edit (Ctrl+Shift+L).', 'info');
       return;
     }
+    if (hit?.type === 'link') {
+      setSelected([hit.id]);
+      if (hit.preview !== false && linkInfo(hit.url)?.embedUrl) setInteractId(hit.id);
+      else if (!hit.locked) void editLink(hit);
+      return;
+    }
     if (hit && (hit.type === 'note' || hit.type === 'text')) {
       setSelected([hit.id]);
       setEditingId(hit.id);
@@ -961,17 +1123,28 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
 
   const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
     if (editingId) return;
+    const text = e.clipboardData.getData('text/plain');
+    const items = parseClip(text);
     const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
-    if (!files.length) return;
     e.preventDefault();
-    void insertImages(files);
+    if (items) pasteItems(items, lastPointer.current);
+    else if (files.length) void insertImages(files, lastPointer.current ?? undefined);
+    else if (text.trim()) pasteText(text.trim(), lastPointer.current);
+    else if (clipboard) pasteItems(clipboard, lastPointer.current);
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
-    if (!files.length) return;
-    e.preventDefault();
-    void insertImages(files, toWorld(e.clientX, e.clientY));
+    if (files.length) {
+      e.preventDefault();
+      void insertImages(files, toWorld(e.clientX, e.clientY));
+      return;
+    }
+    const uri = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')).split('\n').find((l) => l.trim() && !l.startsWith('#'));
+    if (uri && normalizeUrl(uri)) {
+      e.preventDefault();
+      addLink(uri, toWorld(e.clientX, e.clientY));
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -992,15 +1165,22 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     }
     if (mod && k === 'd' && selectedEls.length) {
       e.preventDefault();
-      const withContents = moveSet(selected).ids;
-      const copies = copyElements(
-        elements.filter((el) => withContents.has(el.id)),
-        newId,
-        24,
-        24,
-      );
-      commit([...elements, ...copies]);
-      setSelected(copies.map((c) => c.id));
+      duplicateSelection();
+      return;
+    }
+    if (mod && k === 'c' && selectedEls.length) {
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    if (mod && k === 'x' && selectedEls.length) {
+      e.preventDefault();
+      cutSelection();
+      return;
+    }
+    if (mod && e.shiftKey && (e.key === ']' || e.key === '}' || e.key === '[' || e.key === '{') && selectedEls.length) {
+      e.preventDefault();
+      arrange(e.key === ']' || e.key === '}');
       return;
     }
     if (mod && k === 'g') {
@@ -1016,13 +1196,16 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected.length) {
       e.preventDefault();
-      const kept = selectedEls.filter((el) => el.locked);
-      commit(elements.filter((el) => !selected.includes(el.id) || el.locked));
-      setSelected(kept.map((el) => el.id));
-      if (kept.length) useStore.getState().notify(`${kept.length === 1 ? 'A locked item was' : `${kept.length} locked items were`} kept. Unlock to delete.`, 'info');
+      deleteSelection();
       return;
     }
+    if (e.key === 'Escape' && interactId) return setInteractId(null);
     if (e.key === 'Escape') return setSelected([]);
+    if (e.key === 'Enter' && single?.type === 'link' && !single.locked) {
+      e.preventDefault();
+      void editLink(single);
+      return;
+    }
     if (e.key === 'Enter' && single && !single.locked && (single.type === 'note' || single.type === 'text')) {
       e.preventDefault();
       setEditingId(single.id);
@@ -1061,6 +1244,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
       if (e.key === '0') return setVp((v) => ({ ...v, zoom: 1 }));
       if (k === 'm') return toggleMinimap();
       if (k === 'g') return toggleSnap();
+      if (k === 'l') return void askForLink();
       if (k === 'i') return fileRef.current?.click();
       const t = TOOLS.find((x) => x.key.toLowerCase() === k);
       if (t) setTool(t.value);
@@ -1191,6 +1375,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         lockState={!selectedEls.length ? null : selectedEls.every((el) => el.locked) ? 'locked' : 'unlocked'}
         onToggleLock={toggleLock}
         onPickImage={() => fileRef.current?.click()}
+        onAddLink={() => void askForLink()}
       />
       <input
         ref={fileRef}
@@ -1219,6 +1404,8 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
+        onPointerLeave={() => (lastPointer.current = null)}
         role="img"
         aria-label={`Whiteboard “${board.name}” with ${elements.length} items`}
       >
@@ -1260,7 +1447,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         <WbDefsContext.Provider value={defs}>
           <g className="wb-world" transform={`translate(${vp.x} ${vp.y}) scale(${vp.zoom})`}>
             {painted.map((el) => (
-              <WbElementView key={el.id} el={el} ink={ink} paper={theme.palette.background.paper} hideText={el.id === editingId} docTitle={el.type === 'note' ? docTitles(el.docId) : undefined} />
+              <WbElementView key={el.id} el={el} ink={ink} paper={theme.palette.background.paper} hideText={el.id === editingId} docTitle={el.type === 'note' ? docTitles(el.docId) : undefined} interactive={el.id === interactId} />
             ))}
             {draftView && <WbElementView el={draftView} ink={ink} paper={theme.palette.background.paper} />}
             <g className="wb-ui">
@@ -1395,6 +1582,93 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
           </g>
         </WbDefsContext.Provider>
       </svg>
+
+      <Menu
+        open={!!ctxMenu}
+        onClose={() => setCtxMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={ctxAt}
+        MenuListProps={{ dense: true, 'aria-label': 'Whiteboard actions' }}
+      >
+        {selectedEls.length > 0 && [
+          <MenuItem key="cut" onClick={menuAct(cutSelection)}>
+            <ListItemText>Cut</ListItemText>
+            <Shortcut keys="Ctrl+X" />
+          </MenuItem>,
+          <MenuItem key="copy" onClick={menuAct(() => void copySelection())}>
+            <ListItemText>Copy</ListItemText>
+            <Shortcut keys="Ctrl+C" />
+          </MenuItem>,
+        ]}
+        <MenuItem onClick={menuAct(() => ctxMenu && void pasteFromMenu(ctxMenu.at))}>
+          <ListItemText>Paste here</ListItemText>
+          <Shortcut keys="Ctrl+V" />
+        </MenuItem>
+        {selectedEls.length > 0 && [
+          <MenuItem key="dup" onClick={menuAct(duplicateSelection)}>
+            <ListItemText>Duplicate</ListItemText>
+            <Shortcut keys="Ctrl+D" />
+          </MenuItem>,
+          <Divider key="d1" />,
+          <MenuItem key="front" onClick={menuAct(() => arrange(true))}>
+            <ListItemText>Bring to front</ListItemText>
+            <Shortcut keys="Ctrl+Shift+]" />
+          </MenuItem>,
+          <MenuItem key="back" onClick={menuAct(() => arrange(false))}>
+            <ListItemText>Send to back</ListItemText>
+            <Shortcut keys="Ctrl+Shift+[" />
+          </MenuItem>,
+          selectedEls.length > 1 && !oneGroup && (
+            <MenuItem key="group" onClick={menuAct(groupSelection)}>
+              <ListItemText>Group</ListItemText>
+              <Shortcut keys="Ctrl+G" />
+            </MenuItem>
+          ),
+          selectedEls.some((el) => el.groupId) && (
+            <MenuItem key="ungroup" onClick={menuAct(ungroupSelection)}>
+              <ListItemText>Ungroup</ListItemText>
+              <Shortcut keys="Ctrl+Shift+G" />
+            </MenuItem>
+          ),
+          <MenuItem key="lock" onClick={menuAct(toggleLock)}>
+            <ListItemText>{selectedEls.every((el) => el.locked) ? 'Unlock' : 'Lock'}</ListItemText>
+            <Shortcut keys="Ctrl+Shift+L" />
+          </MenuItem>,
+          <Divider key="d2" />,
+          <MenuItem key="delete" onClick={menuAct(deleteSelection)} sx={{ color: 'error.main' }}>
+            <ListItemText>Delete</ListItemText>
+            <Shortcut keys="Del" />
+          </MenuItem>,
+        ]}
+        {single?.type === 'link' && [
+          <Divider key="ld" />,
+          <MenuItem key="lopen" onClick={menuAct(() => openLink(single.url))}>
+            <ListItemText>Open link</ListItemText>
+          </MenuItem>,
+          !single.locked && (
+            <MenuItem key="ledit" onClick={menuAct(() => void editLink(single))}>
+              <ListItemText>Edit link…</ListItemText>
+              <Shortcut keys="Enter" />
+            </MenuItem>
+          ),
+          !single.locked && linkInfo(single.url)?.embedUrl && (
+            <MenuItem key="lprev" onClick={menuAct(() => commit(elements.map((x) => (x.id === single.id ? { ...single, preview: single.preview === false } : x))))}>
+              <ListItemText>{single.preview === false ? 'Show live preview' : 'Hide live preview'}</ListItemText>
+            </MenuItem>
+          ),
+        ]}
+        {selectedEls.length === 0 && (
+          <MenuItem onClick={menuAct(() => ctxMenu && void askForLink(ctxMenu.at))}>
+            <ListItemText>Add link here…</ListItemText>
+          </MenuItem>
+        )}
+        {selectedEls.length === 0 && (
+          <MenuItem onClick={menuAct(() => setSelected(elements.map((el) => el.id)))}>
+            <ListItemText>Select all</ListItemText>
+            <Shortcut keys="Ctrl+A" />
+          </MenuItem>
+        )}
+      </Menu>
 
       {editing && (editing.type === 'note' || editing.type === 'text') && (
         <EditOverlay

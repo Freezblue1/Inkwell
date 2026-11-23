@@ -30,7 +30,8 @@ import { useStore } from '@/store';
 import { BIBLE_FIELDS, BIBLE_KIND_LABELS } from '@/lib/bible';
 import { addAsset, deleteAsset } from '@/db/repos/assets';
 import { useAssetUrl } from '@/hooks/useAssetUrl';
-import { confirmDialog } from '@/components/DialogHost';
+import { confirmDialog, promptDialog } from '@/components/DialogHost';
+import { addCustomTemplate, templateFromEntry } from '@/lib/bibleTemplates';
 import { DOC_COLORS } from '@/features/binder/docIcons';
 import { sceneSequence } from '@/lib/tree';
 
@@ -84,6 +85,15 @@ export default function BibleEntryDialog() {
       </Dialog>
     );
   }
+
+  /** Keeps this entry's fields as a template for new entries of the same kind (any project). */
+  const saveAsTemplate = async () => {
+    if (!draft) return;
+    const name = await promptDialog({ title: 'Save as template', label: 'Template name', initial: draft.name, confirmLabel: 'Save template' });
+    if (!name?.trim()) return;
+    addCustomTemplate(templateFromEntry(draft, name.trim()));
+    useStore.getState().notify(`Saved “${name.trim()}”: pick it under New ${BIBLE_KIND_LABELS[draft.kind].singular.toLowerCase()}`);
+  };
 
   const set = (patch: Record<string, unknown>) => {
     dirty.current = true;
@@ -271,6 +281,7 @@ export default function BibleEntryDialog() {
         <Button color="error" startIcon={<DeleteIcon />} onClick={() => void remove()}>
           Delete
         </Button>
+        <Button onClick={() => void saveAsTemplate()}>Save as template</Button>
         <Box sx={{ flex: 1 }} />
         <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
           Changes save automatically

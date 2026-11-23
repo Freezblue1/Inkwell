@@ -20,6 +20,7 @@ import OpacityIcon from '@mui/icons-material/Opacity';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import MapIcon from '@mui/icons-material/MapOutlined';
+import LinkIcon from '@mui/icons-material/Link';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import GroupWorkIcon from '@mui/icons-material/GroupWorkOutlined';
 import LayersClearIcon from '@mui/icons-material/LayersClearOutlined';
@@ -120,6 +121,8 @@ interface Props {
   minimap: boolean;
   onToggleMinimap: () => void;
   onPickImage: () => void;
+  /** Add a web link (Google Maps, YouTube… show a live preview). */
+  onAddLink?: () => void;
   /** Sticky notes are selected: show note paper and text colours. */
   noteSelection?: { fill: string; text: string } | null;
   /** Fill of the selected shapes (undefined when none are selected, or they differ). */
@@ -179,6 +182,13 @@ export function WhiteboardToolbar(p: Props) {
           <AddPhotoAlternateIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+      {p.onAddLink && (
+        <Tooltip title="Add a link (L) — maps, videos and music show a live preview; or paste or drop a link">
+          <IconButton size="small" aria-label="Add a link" onClick={p.onAddLink}>
+            <LinkIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
       {p.canGroup && (
         <Tooltip title="Group (Ctrl+G) — select, move and turn them as one">
           <IconButton size="small" aria-label="Group" onClick={p.onGroup}>

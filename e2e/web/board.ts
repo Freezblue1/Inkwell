@@ -147,6 +147,7 @@ export function toolbarButton(page: Page, name: string): Locator {
 export async function answerPrompt(page: Page, value: string) {
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('textbox').fill(value);
-  await dialog.getByRole('button', { name: 'Save' }).click();
+  // The confirm button is "Save", "Add", "Save template"… (the last button in the dialog).
+  await dialog.getByRole('button').last().click();
   await expect(dialog).toHaveCount(0);
 }

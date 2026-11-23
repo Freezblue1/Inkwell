@@ -440,7 +440,20 @@ export interface WbFrame extends WbBase {
   fill: string;
 }
 
-export type WbElement = WbPath | WbShape | WbArrow | WbNote | WbText | WbImage | WbCard | WbFrame;
+/** A web link, with a live preview for sites that allow it (Google Maps, YouTube…). */
+export interface WbLink extends WbBase {
+  type: 'link';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  url: string;
+  title: string;
+  /** Show the live preview (false: just the link card). */
+  preview: boolean;
+}
+
+export type WbElement = WbPath | WbShape | WbArrow | WbNote | WbText | WbImage | WbCard | WbFrame | WbLink;
 
 /** A freeform whiteboard (brainstorms, maps, mind maps). Several per project. */
 export interface WhiteboardGroup {

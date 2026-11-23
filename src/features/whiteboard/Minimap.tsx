@@ -43,7 +43,7 @@ export function Minimap({ elements, vp, width, height, ink, onCenter }: Props) {
   const fillOf = (el: WbElement): string => {
     if (el.type === 'note') return noteFill(el.fill);
     if (el.type === 'frame') return `${el.fill}55`;
-    if (el.type === 'card') return '#ffffff';
+    if (el.type === 'card' || el.type === 'link') return '#ffffff';
     if (el.type === 'image') return '#9e9e9e';
     return 'none';
   };
