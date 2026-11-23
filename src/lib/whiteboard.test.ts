@@ -14,6 +14,8 @@ import {
   hitTest,
   moveElement,
   alignSnap,
+  segmentIntersectsRect,
+  touchesRect,
   selectedGroups,
   snapToGrid,
   withGroups,
@@ -282,5 +284,16 @@ describe('groups, grid and guides', () => {
     const mid = alignSnap({ x: 500, y: 121, w: 80, h: 6 }, [other], 6); // centres: 124 vs 125
     expect(mid.dy).toBe(1);
     expect(mid.guides.some((g) => g.y1 === 125 && g.y2 === 125)).toBe(true);
+  });
+});
+
+describe('arrow selection', () => {
+  const arrow: WbArrow = { id: 'ar', type: 'arrow', x1: 0, y1: 0, x2: 200, y2: 200, color: 'ink', strokeWidth: 2, from: null, to: null };
+
+  it('box-selects an arrow only where the line passes, not its corner-to-corner box', () => {
+    expect(touchesRect(arrow, { x: 90, y: 90, w: 20, h: 20 })).toBe(true); // on the line
+    expect(touchesRect(arrow, { x: 150, y: 10, w: 30, h: 30 })).toBe(false); // inside the old box, off the line
+    expect(touchesRect(arrow, { x: -50, y: 120, w: 300, h: 10 })).toBe(true); // a thin box across the line
+    expect(segmentIntersectsRect({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: -5, w: 5, h: 10 })).toBe(false);
   });
 });

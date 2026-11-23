@@ -248,3 +248,21 @@ test('pinch with two fingers zooms around them, and moving them pans', async ({ 
   await touch('touchEnd', []);
   await expect.poll(async () => (await viewport(page)).y - zoomed.y).toBeCloseTo(50, 0);
 });
+
+test('a selected arrow is outlined along its line, not with a box', async ({ page }) => {
+  await tool(page, 'a');
+  await drag(page, [100, 100], [400, 300]);
+  await tool(page, 'v');
+  await click(page, 250, 200); // on the line
+  await expect(canvas(page).locator('[data-arrow-halo]')).toHaveCount(1);
+  // No dashed selection box (only the line's halo and its two end handles).
+  await expect(canvas(page).locator('rect[stroke-dasharray]')).toHaveCount(0);
+  // Clicking inside the old corner-to-corner box but off the line selects nothing.
+  await click(page, 350, 130);
+  await expect(canvas(page).locator('[data-arrow-halo]')).toHaveCount(0);
+  // A selection box picks the arrow only where it crosses the line.
+  await drag(page, [330, 110], [390, 160]); // off the line
+  await expect(canvas(page).locator('[data-arrow-halo]')).toHaveCount(0);
+  await drag(page, [230, 170], [270, 230]); // across the line
+  await expect(canvas(page).locator('[data-arrow-halo]')).toHaveCount(1);
+});

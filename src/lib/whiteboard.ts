@@ -296,6 +296,32 @@ export function topmostAt(els: WbElement[], p: Point, tol = 6): WbElement | null
   return null;
 }
 
+/** Does the segment a–b touch the rectangle (inside it or crossing an edge)? */
+export function segmentIntersectsRect(a: Point, b: Point, r: Rect): boolean {
+  const inside = (p: Point) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+  if (inside(a) || inside(b)) return true;
+  const cross = (p: Point, q: Point, s: Point, t: Point) => {
+    const d = (q.x - p.x) * (t.y - s.y) - (q.y - p.y) * (t.x - s.x);
+    if (!d) return false;
+    const u = ((s.x - p.x) * (t.y - s.y) - (s.y - p.y) * (t.x - s.x)) / d;
+    const v = ((s.x - p.x) * (q.y - p.y) - (s.y - p.y) * (q.x - p.x)) / d;
+    return u >= 0 && u <= 1 && v >= 0 && v <= 1;
+  };
+  const c = [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x + r.w, y: r.y + r.h },
+    { x: r.x, y: r.y + r.h },
+  ];
+  return c.some((p, i) => cross(a, b, p, c[(i + 1) % 4]));
+}
+
+/** Is the element touched by a selection box? Arrows count only where the line itself passes. */
+export function touchesRect(el: WbElement, r: Rect): boolean {
+  if (el.type === 'arrow') return segmentIntersectsRect({ x: el.x1, y: el.y1 }, { x: el.x2, y: el.y2 }, r);
+  return rectsIntersect(elementBounds(el), r);
+}
+
 export function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y;
 }

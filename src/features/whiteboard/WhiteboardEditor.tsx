@@ -38,7 +38,6 @@ import {
   routeConnectors,
   moveElement,
   normalizeRect,
-  rectsIntersect,
   resizeElement,
   simplifyPoints,
   textHeight,
@@ -47,6 +46,7 @@ import {
   DEFAULT_NOTE_TEXT,
   NOTE_COLORS,
   canRotate,
+  touchesRect,
   alignSnap,
   selectedGroups,
   snapToGrid,
@@ -859,7 +859,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
         setMarquee(null);
         if (r.w * vp.zoom < 3 && r.h * vp.zoom < 3) return;
         // Frames are picked only when the box covers them completely.
-        const ids = elements.filter((el) => (el.type === 'frame' ? containsRect(r, elementBounds(el)) : rectsIntersect(elementBounds(el), r))).map((el) => el.id);
+        const ids = elements.filter((el) => (el.type === 'frame' ? containsRect(r, elementBounds(el)) : touchesRect(el, r))).map((el) => el.id);
         const picked = withGroups(elements, ids);
         setSelected((cur) => (d.additive ? [...new Set([...cur, ...picked])] : picked));
         return;
@@ -1324,7 +1324,26 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
                   </text>
                 </g>
               )}
-              {selBounds && !editingId && !(single && rotationOf(single) !== 0) && (
+              {!editingId &&
+                selectedEls.map((el) =>
+                  el.type === 'arrow' ? (
+                    // Arrows are outlined along the line itself, not with a box from corner to corner.
+                    <line
+                      key={`halo-${el.id}`}
+                      data-arrow-halo={el.id}
+                      x1={el.x1}
+                      y1={el.y1}
+                      x2={el.x2}
+                      y2={el.y2}
+                      stroke={el.locked ? theme.palette.text.disabled : theme.palette.primary.main}
+                      strokeOpacity={0.35}
+                      strokeWidth={el.strokeWidth + 10 / vp.zoom}
+                      strokeLinecap="round"
+                      pointerEvents="none"
+                    />
+                  ) : null,
+                )}
+              {selBounds && !editingId && !(single && rotationOf(single) !== 0) && !selectedEls.every((el) => el.type === 'arrow') && (
                 <rect
                   x={selBounds.x - 4 / vp.zoom}
                   y={selBounds.y - 4 / vp.zoom}
