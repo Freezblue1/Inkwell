@@ -505,6 +505,78 @@ export function boundaryPoint(el: WbElement, towardWorld: Point, gap = 6): Point
   return { x: c.x + dx * k, y: c.y + dy * k };
 }
 
+interface Anchor {
+  p: Point;
+  /** Outward direction (unit length). */
+  n: Point;
+  corner: boolean;
+}
+
+/**
+ * The fixed points an attached arrow can start or end at: the middle of each
+ * side and each corner (on an ellipse, the matching points of its outline),
+ * pushed out by `gap`. Rotation-aware.
+ */
+export function anchorPoints(el: WbElement, gap = 6): Anchor[] {
+  const r = localBounds(el);
+  const c = centerOf(r);
+  const out: Anchor[] = [];
+  for (let i = 0; i < 8; i++) {
+    const t = (i * Math.PI) / 4;
+    const cos = Math.round(Math.cos(t) * 1e9) / 1e9;
+    const sin = Math.round(Math.sin(t) * 1e9) / 1e9;
+    let p: Point;
+    let n: Point;
+    if (el.type === 'ellipse') {
+      const rx = Math.max(1, r.w / 2);
+      const ry = Math.max(1, r.h / 2);
+      p = { x: c.x + rx * cos, y: c.y + ry * sin };
+      const len = Math.hypot(cos / rx, sin / ry);
+      n = { x: cos / rx / len, y: sin / ry / len };
+    } else {
+      const sx = Math.sign(cos);
+      const sy = Math.sign(sin);
+      p = { x: c.x + (sx * r.w) / 2, y: c.y + (sy * r.h) / 2 };
+      const len = Math.hypot(sx, sy);
+      n = { x: sx / len, y: sy / len };
+    }
+    out.push({ p: { x: p.x + n.x * gap, y: p.y + n.y * gap }, n, corner: i % 2 === 1 });
+  }
+  const rot = rotationOf(el);
+  if (!rot) return out;
+  const o = { x: 0, y: 0 };
+  return out.map((a) => ({ ...a, p: rotatePoint(a.p, rot, c), n: rotatePoint(a.n, rot, o) }));
+}
+
+/**
+ * Picks where an arrow joins its elements: the pair of anchor points that is
+ * short and faces each other, with a mild preference for side middles over
+ * corners. A free end stays at its own point.
+ */
+export function connectorEnds(from: WbElement | undefined, to: WbElement | undefined, start: Point, end: Point): { start: Point; end: Point } {
+  const free = (p: Point): Anchor[] => [{ p, n: { x: 0, y: 0 }, corner: false }];
+  const as = from ? anchorPoints(from) : free(start);
+  const bs = to ? anchorPoints(to) : free(end);
+  let best = { start, end };
+  let bestCost = Infinity;
+  for (const a of as) {
+    for (const b of bs) {
+      const dx = b.p.x - a.p.x;
+      const dy = b.p.y - a.p.y;
+      const d = Math.hypot(dx, dy) || 1e-6;
+      // 1 when the anchor points straight at the other end, up to 3 when it points away.
+      const faceA = from ? 2 - (a.n.x * dx + a.n.y * dy) / d : 1;
+      const faceB = to ? 2 + (b.n.x * dx + b.n.y * dy) / d : 1;
+      const cost = d * faceA * faceB * (a.corner ? 1.25 : 1) * (b.corner ? 1.25 : 1);
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = { start: a.p, end: b.p };
+      }
+    }
+  }
+  return best;
+}
+
 /**
  * Recomputes the ends of attached arrows from the elements they're attached
  * to. Attachments to deleted elements are dropped. Returns the same array
@@ -520,10 +592,7 @@ export function routeConnectors(els: WbElement[]): WbElement[] {
     const b = el.to ? byId.get(el.to) : undefined;
     const aOk = a && isAttachable(a) ? a : undefined;
     const bOk = b && isAttachable(b) ? b : undefined;
-    const startAim = bOk ? centerOf(elementBounds(bOk)) : { x: el.x2, y: el.y2 };
-    const endAim = aOk ? centerOf(elementBounds(aOk)) : { x: el.x1, y: el.y1 };
-    const s = aOk ? boundaryPoint(aOk, startAim) : { x: el.x1, y: el.y1 };
-    const e = bOk ? boundaryPoint(bOk, endAim) : { x: el.x2, y: el.y2 };
+    const { start: s, end: e } = connectorEnds(aOk, bOk, { x: el.x1, y: el.y1 }, { x: el.x2, y: el.y2 });
     const next: WbArrow = { ...el, x1: s.x, y1: s.y, x2: e.x, y2: e.y, from: aOk ? el.from : null, to: bOk ? el.to : null };
     if (next.x1 === el.x1 && next.y1 === el.y1 && next.x2 === el.x2 && next.y2 === el.y2 && next.from === el.from && next.to === el.to) return el;
     changed = true;

@@ -4,7 +4,9 @@ import {
   arrowHead,
   arrowLineEnd,
   attachableAt,
+  anchorPoints,
   boundaryPoint,
+  connectorEnds,
   containsRect,
   copyElements,
   elementBounds,
@@ -104,6 +106,35 @@ describe('attached arrows, frames, pictures', () => {
     const m = moved[2] as WbArrow;
     expect(m.y2).toBeLessThan(300); // now enters B from above
     expect(m.y2).toBeGreaterThan(200);
+  });
+
+  it('joins attached arrows at side middles or corners, whichever faces the other end', () => {
+    // Side by side: middle of the right side to middle of the left side.
+    expect(connectorEnds(a, b, { x: 0, y: 0 }, { x: 0, y: 0 })).toEqual({ start: { x: 106, y: 50 }, end: { x: 294, y: 50 } });
+    // Below and a little to the right: still the side middles.
+    const below = { ...b, x: 60, y: 300 };
+    expect(connectorEnds(a, below, { x: 0, y: 0 }, { x: 0, y: 0 })).toEqual({ start: { x: 50, y: 106 }, end: { x: 110, y: 294 } });
+    // Clearly diagonal: corner to corner.
+    const diag = connectorEnds(a, { ...b, y: 300 }, { x: 0, y: 0 }, { x: 0, y: 0 });
+    expect(diag.start.x).toBeCloseTo(100 + 6 / Math.SQRT2);
+    expect(diag.start.y).toBeCloseTo(100 + 6 / Math.SQRT2);
+    expect(diag.end.x).toBeCloseTo(300 - 6 / Math.SQRT2);
+    expect(diag.end.y).toBeCloseTo(300 - 6 / Math.SQRT2);
+    // One free end: the attached end faces it.
+    expect(connectorEnds(a, undefined, { x: 0, y: 0 }, { x: 50, y: -200 }).start).toEqual({ x: 50, y: -6 });
+  });
+
+  it('puts anchor points on ellipses and turns them with rotated elements', () => {
+    const ell: WbShape = { ...ellipse, x: 0, y: 0, w: 200, h: 100 };
+    const pts = anchorPoints(ell, 0).map((q) => q.p);
+    expect(pts[0].x).toBeCloseTo(200);
+    expect(pts[0].y).toBeCloseTo(50);
+    expect(pts[2].x).toBeCloseTo(100);
+    expect(pts[2].y).toBeCloseTo(100);
+    const turned = anchorPoints({ ...a, rotation: 90 }, 0).map((q) => q.p);
+    // The right-side middle of a quarter-turned note now sits at the bottom.
+    expect(turned[0].x).toBeCloseTo(50);
+    expect(turned[0].y).toBeCloseTo(100);
   });
 
   it('keeps the arrow where it was when its target is deleted, and drops the link', () => {

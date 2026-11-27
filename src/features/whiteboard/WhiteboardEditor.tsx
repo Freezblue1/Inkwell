@@ -30,7 +30,7 @@ import { addAsset } from '@/db/repos/assets';
 import { promptDialog } from '@/components/DialogHost';
 import {
   attachableAt,
-  boundaryPoint,
+  connectorEnds,
   containsRect,
   copyElements,
   elementBounds,
@@ -1288,12 +1288,7 @@ export function WhiteboardEditor({ board, onSave, registerHandle }: Props) {
     if (!draft || draft.type !== 'arrow' || (!draft.from && !draft.to)) return draft;
     const src = draft.from ? elements.find((el) => el.id === draft.from) : undefined;
     const dst = draft.to ? elements.find((el) => el.id === draft.to) : undefined;
-    const mid = (el: WbElement) => {
-      const b = elementBounds(el);
-      return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-    };
-    const end = dst ? boundaryPoint(dst, src ? mid(src) : { x: draft.x1, y: draft.y1 }) : { x: draft.x2, y: draft.y2 };
-    const start = src ? boundaryPoint(src, dst ? mid(dst) : end) : { x: draft.x1, y: draft.y1 };
+    const { start, end } = connectorEnds(src, dst, { x: draft.x1, y: draft.y1 }, { x: draft.x2, y: draft.y2 });
     return { ...draft, x1: start.x, y1: start.y, x2: end.x, y2: end.y };
   }, [draft, elements]);
 

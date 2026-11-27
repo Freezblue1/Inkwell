@@ -76,6 +76,22 @@ test('arrows attach only at an edge, and follow the shape they attach to', async
   // Move the second box down: the attached arrow's end follows it.
   await drag(page, [540, 190], [540, 390]);
   await expectSaved(page, (els) => (els.find((e) => e.id === linked.id)?.y2 ?? 0) > 250, 'attached arrow end moved with the box');
+  // Both ends sit on one of the fixed points: a side middle or a corner.
+  const els = await savedElements(page);
+  const line = els.find((e) => e.id === linked.id)!;
+  const onAnchor = (r: SavedElement, x: number, y: number) =>
+    [-1, 0, 1].some((sx) =>
+      [-1, 0, 1].some((sy) => {
+        if (!sx && !sy) return false;
+        const g = 6 / Math.hypot(sx, sy);
+        const ax = r.x! + r.w! / 2 + (sx * r.w!) / 2 + sx * g;
+        const ay = r.y! + r.h! / 2 + (sy * r.h!) / 2 + sy * g;
+        return Math.abs(ax - x) < 0.01 && Math.abs(ay - y) < 0.01;
+      }),
+    );
+  expect(onAnchor(els.find((e) => e.id === a.id)!, line.x1!, line.y1!)).toBe(true);
+  expect(onAnchor(els.find((e) => e.id === b.id)!, line.x2!, line.y2!)).toBe(true);
+  await page.screenshot({ path: 'test-results/arrow-anchors.png' });
 });
 
 test('rotates with the round handle (snapping) and with the ] key', async ({ page }) => {
